@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="top-bar">
+    <h1>Gradi</h1>
+    <a href="/gradi/nuovo" class="btn btn-primary">+ Nuovo</a>
+</div>
+<table>
+    <thead><tr>
+        <th>Nome</th><th>Ordine</th><th>ID Formula</th><th>Ufficiale</th><th>Punteggio minimo</th><th>Azioni</th>
+    </tr></thead>
+    <tbody>
+    {% for g in gradi %}
+    <tr>
+        <td>{{ g.nome }}</td>
+        <td>{{ g.ordine }}</td>
+        <td>{{ g.grado_id_formula }}</td>
+        <td>{{ "Sì" if g.is_ufficiale else "No" }}</td>
+        <td>{{ g.punteggio_minimo }}</td>
+        <td class="actions">
+            <a href="/gradi/{{ g.id }}/modifica" class="btn btn-warning">Modifica</a>
+            <form class="inline" method="post" action="/gradi/{{ g.id }}/elimina"
+                  onsubmit="return confirm('Eliminare {{ g.nome }}?')">
+                <button class="btn btn-danger">Elimina</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

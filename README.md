@@ -54,7 +54,7 @@ source venv/bin/activate
 ## 2. Installa le dipendenze
 
 ```bash
-pip install python-telegram-bot aiomysql apscheduler python-dotenv
+pip install -r requirements.txt
 ```
 
 ---

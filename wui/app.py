@@ -1,0 +1,206 @@
+from flask import Flask, render_template, request, redirect, url_for, flash
+import aiomysql
+import asyncio
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "cambia_questa_chiave")
+
+def get_db_config():
+    return {
+        "host":     os.getenv("DB_HOST", "localhost"),
+        "port":     int(os.getenv("DB_PORT", 3306)),
+        "user":     os.getenv("DB_USER"),
+        "password": os.getenv("DB_PASSWORD"),
+        "db":       os.getenv("DB_NAME"),
+        "autocommit": False
+    }
+
+async def query(sql, params=None, fetch=None):
+    conn = await aiomysql.connect(**get_db_config())
+    try:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(sql, params or ())
+            if fetch == "all":
+                return await cur.fetchall()
+            if fetch == "one":
+                return await cur.fetchone()
+            await conn.commit()
+            return cur.lastrowid
+    finally:
+        conn.close()
+
+def db(sql, params=None, fetch=None):
+    return asyncio.run(query(sql, params, fetch))
+
+
+# ============================================================
+# INDEX
+# ============================================================
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+# ============================================================
+# UTENTI
+# ============================================================
+
+@app.route("/utenti")
+def utenti():
+    rows = db("SELECT u.*, g.nome as grado_nome FROM utenti u LEFT JOIN gradi g ON u.grado_id = g.id ORDER BY u.nome", fetch="all")
+    return render_template("utenti.html", utenti=rows)
+
+@app.route("/utenti/nuovo", methods=["GET","POST"])
+def utenti_nuovo():
+    gradi = db("SELECT * FROM gradi ORDER BY ordine", fetch="all")
+    if request.method == "POST":
+        telegram_id = request.form.get("telegram_id", "").strip()
+        if telegram_id and not telegram_id.isdigit():
+            flash("Errore: il Telegram ID deve essere un numero intero.")
+            return render_template("utenti_form.html", utente=None, gradi=gradi)
+        db("INSERT INTO utenti (telegram_id, nome, username, stato, grado_id) VALUES (%s,%s,%s,%s,%s)", (
+            request.form.get("telegram_id") or None,
+            request.form["nome"],
+            request.form.get("username") or None,
+            request.form["stato"],
+            request.form.get("grado_id") or None
+        ))
+        flash("Utente creato.")
+        return redirect(url_for("utenti"))
+    return render_template("utenti_form.html", utente=None, gradi=gradi)
+
+@app.route("/utenti/<int:id>/modifica", methods=["GET","POST"])
+def utenti_modifica(id):
+    gradi = db("SELECT * FROM gradi ORDER BY ordine", fetch="all")
+    utente = db("SELECT * FROM utenti WHERE id = %s", (id,), fetch="one")
+    if request.method == "POST":
+        telegram_id = request.form.get("telegram_id", "").strip()
+        if telegram_id and not telegram_id.isdigit():
+            flash("Errore: il Telegram ID deve essere un numero intero.")
+            return render_template("utenti_form.html", utente=None, gradi=gradi)
+        db("UPDATE utenti SET telegram_id=%s, nome=%s, username=%s, stato=%s, grado_id=%s, autonomia=%s, leadership=%s, pianificazione=%s WHERE id=%s", (
+            request.form.get("telegram_id") or None,
+            request.form["nome"],
+            request.form.get("username") or None,
+            request.form["stato"],
+            request.form.get("grado_id") or None,
+            request.form["autonomia"],
+            request.form["leadership"],
+            request.form["pianificazione"],
+            id
+        ))
+        flash("Utente aggiornato.")
+        return redirect(url_for("utenti"))
+    return render_template("utenti_form.html", utente=utente, gradi=gradi)
+
+@app.route("/utenti/<int:id>/elimina", methods=["POST"])
+def utenti_elimina(id):
+    db("DELETE FROM utenti WHERE id = %s", (id,))
+    flash("Utente eliminato.")
+    return redirect(url_for("utenti"))
+
+
+# ============================================================
+# GRADI
+# ============================================================
+
+@app.route("/gradi")
+def gradi():
+    rows = db("SELECT * FROM gradi ORDER BY ordine", fetch="all")
+    return render_template("gradi.html", gradi=rows)
+
+@app.route("/gradi/nuovo", methods=["GET","POST"])
+def gradi_nuovo():
+    if request.method == "POST":
+        db("INSERT INTO gradi (nome, ordine, grado_id_formula, is_ufficiale, punteggio_minimo) VALUES (%s,%s,%s,%s,%s)", (
+            request.form["nome"],
+            request.form["ordine"],
+            request.form["grado_id_formula"],
+            1 if request.form.get("is_ufficiale") else 0,
+            request.form["punteggio_minimo"]
+        ))
+        flash("Grado creato.")
+        return redirect(url_for("gradi"))
+    return render_template("gradi_form.html", grado=None)
+
+@app.route("/gradi/<int:id>/modifica", methods=["GET","POST"])
+def gradi_modifica(id):
+    grado = db("SELECT * FROM gradi WHERE id = %s", (id,), fetch="one")
+    if request.method == "POST":
+        db("UPDATE gradi SET nome=%s, ordine=%s, grado_id_formula=%s, is_ufficiale=%s, punteggio_minimo=%s WHERE id=%s", (
+            request.form["nome"],
+            request.form["ordine"],
+            request.form["grado_id_formula"],
+            1 if request.form.get("is_ufficiale") else 0,
+            request.form["punteggio_minimo"],
+            id
+        ))
+        flash("Grado aggiornato.")
+        return redirect(url_for("gradi"))
+    return render_template("gradi_form.html", grado=grado)
+
+@app.route("/gradi/<int:id>/elimina", methods=["POST"])
+def gradi_elimina(id):
+    db("DELETE FROM gradi WHERE id = %s", (id,))
+    flash("Grado eliminato.")
+    return redirect(url_for("gradi"))
+
+
+# ============================================================
+# RUOLI
+# ============================================================
+
+@app.route("/ruoli")
+def ruoli():
+    rows = db("SELECT r.*, g.nome as grado_nome FROM ruoli r LEFT JOIN gradi g ON r.grado_minimo_id = g.id ORDER BY r.nome", fetch="all")
+    return render_template("ruoli.html", ruoli=rows)
+
+@app.route("/ruoli/nuovo", methods=["GET","POST"])
+def ruoli_nuovo():
+    gradi = db("SELECT * FROM gradi ORDER BY ordine", fetch="all")
+    if request.method == "POST":
+        db("INSERT INTO ruoli (nome, descrizione, grado_minimo_id, is_sl) VALUES (%s,%s,%s,%s)", (
+            request.form["nome"],
+            request.form.get("descrizione") or None,
+            request.form.get("grado_minimo_id") or None,
+            1 if request.form.get("is_sl") else 0
+        ))
+        flash("Ruolo creato.")
+        return redirect(url_for("ruoli"))
+    return render_template("ruoli_form.html", ruolo=None, gradi=gradi)
+
+@app.route("/ruoli/<int:id>/modifica", methods=["GET","POST"])
+def ruoli_modifica(id):
+    gradi = db("SELECT * FROM gradi ORDER BY ordine", fetch="all")
+    ruolo = db("SELECT * FROM ruoli WHERE id = %s", (id,), fetch="one")
+    if request.method == "POST":
+        db("UPDATE ruoli SET nome=%s, descrizione=%s, grado_minimo_id=%s, is_sl=%s, attivo=%s WHERE id=%s", (
+            request.form["nome"],
+            request.form.get("descrizione") or None,
+            request.form.get("grado_minimo_id") or None,
+            1 if request.form.get("is_sl") else 0,
+            1 if request.form.get("attivo") else 0,
+            id
+        ))
+        flash("Ruolo aggiornato.")
+        return redirect(url_for("ruoli"))
+    return render_template("ruoli_form.html", ruolo=ruolo, gradi=gradi)
+
+@app.route("/ruoli/<int:id>/elimina", methods=["POST"])
+def ruoli_elimina(id):
+    db("DELETE FROM ruoli WHERE id = %s", (id,))
+    flash("Ruolo eliminato.")
+    return redirect(url_for("gradi"))
+
+
+# ============================================================
+# AVVIO
+# ============================================================
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)

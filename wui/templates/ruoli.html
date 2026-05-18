@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="top-bar">
+    <h1>Ruoli</h1>
+    <a href="/ruoli/nuovo" class="btn btn-primary">+ Nuovo</a>
+</div>
+<table>
+    <thead><tr>
+        <th>Nome</th><th>Grado minimo</th><th>SL</th><th>Attivo</th><th>Azioni</th>
+    </tr></thead>
+    <tbody>
+    {% for r in ruoli %}
+    <tr>
+        <td>{{ r.nome }}</td>
+        <td>{{ r.grado_nome or "—" }}</td>
+        <td>{{ "Sì" if r.is_sl else "No" }}</td>
+        <td>{{ "Sì" if r.attivo else "No" }}</td>
+        <td class="actions">
+            <a href="/ruoli/{{ r.id }}/modifica" class="btn btn-warning">Modifica</a>
+            <form class="inline" method="post" action="/ruoli/{{ r.id }}/elimina"
+                  onsubmit="return confirm('Eliminare {{ r.nome }}?')">
+                <button class="btn btn-danger">Elimina</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
