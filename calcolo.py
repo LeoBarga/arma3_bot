@@ -84,8 +84,8 @@ async def ricalcola_utente(utente_id: int):
                 FROM note WHERE utente_id = %s
             """, (utente_id,))
             note = await cur.fetchone()
-            meriti   = note["meriti"]   or 0
-            demeriti = note["demeriti"] or 0
+            meriti   = int(note["meriti"]   or 0)
+            demeriti = int(note["demeriti"] or 0)
             delta_note = meriti - demeriti
 
             # --------------------------------------------------------
