@@ -138,6 +138,85 @@ def utenti_elimina(id):
     flash("Utente eliminato.")
     return redirect(url_for("utenti"))
 
+@app.route("/utenti/<int:id>")
+def utenti_dettaglio(id):
+    utente = db("SELECT u.*, g.nome as grado_nome FROM utenti u LEFT JOIN gradi g ON u.grado_id = g.id WHERE u.id = %s", (id,), fetch="one")
+    if not utente:
+        flash("Utente non trovato.")
+        return redirect(url_for("utenti"))
+
+    ruoli_utente = db("""
+        SELECT ur.*, r.nome as ruolo_nome
+        FROM utenti_ruoli ur
+        JOIN ruoli r ON ur.ruolo_id = r.id
+        WHERE ur.utente_id = %s
+        ORDER BY r.nome
+    """, (id,), fetch="all")
+
+    ruoli_disponibili = db("""
+        SELECT * FROM ruoli
+        WHERE attivo = TRUE
+        AND id NOT IN (
+            SELECT ruolo_id FROM utenti_ruoli WHERE utente_id = %s
+        )
+        ORDER BY nome
+    """, (id,), fetch="all")
+
+    note_utente = db("""
+        SELECT n.*, u.nome as inserito_da_nome
+        FROM note n
+        LEFT JOIN utenti u ON n.inserito_da = u.id
+        WHERE n.utente_id = %s
+        ORDER BY n.inserito_il DESC
+    """, (id,), fetch="all")
+
+    return render_template("utenti_dettaglio.html",
+        utente=utente,
+        ruoli_utente=ruoli_utente,
+        ruoli_disponibili=ruoli_disponibili,
+        note_utente=note_utente
+    )
+
+@app.route("/utenti/<int:id>/ruolo/aggiungi", methods=["POST"])
+def utenti_ruolo_aggiungi(id):
+    ruolo_id = request.form.get("ruolo_id")
+    if ruolo_id:
+        db("INSERT IGNORE INTO utenti_ruoli (utente_id, ruolo_id, stato) VALUES (%s,%s,'non_acquisito')", (id, ruolo_id))
+    return redirect(url_for("utenti_dettaglio", id=id))
+
+@app.route("/utenti/<int:id>/ruolo/<int:ruolo_id>/stato", methods=["POST"])
+def utenti_ruolo_stato(id, ruolo_id):
+    stato = request.form.get("stato")
+    if stato in ("non_acquisito", "in_corso", "ottenuto"):
+        db("UPDATE utenti_ruoli SET stato = %s WHERE utente_id = %s AND ruolo_id = %s", (stato, id, ruolo_id))
+        from calcolo import ricalcola_utente
+        run_calcolo(ricalcola_utente, id)
+    return redirect(url_for("utenti_dettaglio", id=id))
+
+@app.route("/utenti/<int:id>/ruolo/<int:ruolo_id>/elimina", methods=["POST"])
+def utenti_ruolo_elimina(id, ruolo_id):
+    db("DELETE FROM utenti_ruoli WHERE utente_id = %s AND ruolo_id = %s", (id, ruolo_id))
+    from calcolo import ricalcola_utente
+    run_calcolo(ricalcola_utente, id)
+    return redirect(url_for("utenti_dettaglio", id=id))
+
+@app.route("/utenti/<int:id>/nota/aggiungi", methods=["POST"])
+def utenti_nota_aggiungi(id):
+    tipo  = request.form.get("tipo")
+    testo = request.form.get("testo", "").strip()
+    if tipo in ("merito", "demerito") and testo:
+        db("INSERT INTO note (utente_id, tipo, testo) VALUES (%s,%s,%s)", (id, tipo, testo))
+        from calcolo import ricalcola_utente
+        run_calcolo(ricalcola_utente, id)
+    return redirect(url_for("utenti_dettaglio", id=id))
+
+@app.route("/utenti/<int:id>/nota/<int:nota_id>/elimina", methods=["POST"])
+def utenti_nota_elimina(id, nota_id):
+    db("DELETE FROM note WHERE id = %s AND utente_id = %s", (nota_id, id))
+    from calcolo import ricalcola_utente
+    run_calcolo(ricalcola_utente, id)
+    return redirect(url_for("utenti_dettaglio", id=id))
+
 
 # ============================================================
 # GRADI

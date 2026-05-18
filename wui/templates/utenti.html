@@ -32,6 +32,13 @@
                 <button class="btn btn-danger">Elimina</button>
             </form>
         </td>
+	<td class="actions">
+    	    <a href="/utenti/{{ u.id }}" class="btn btn-primary">Dettaglio</a>
+    	    <a href="/utenti/{{ u.id }}/modifica" class="btn btn-warning">Modifica</a>
+    	    <form class="inline" method="post" action="/utenti/{{ u.id }}/elimina"onsubmit="return confirm('Eliminare {{ u.nome }}?')">
+       	      <button class="btn btn-danger">Elimina</button>
+            </form>
+        </td>
     </tr>
     {% endfor %}
     </tbody>
