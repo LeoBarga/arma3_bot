@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
-import aiomysql
+import pymysql
+import pymysql.cursors
 import asyncio
 import sys
 import os
@@ -12,47 +13,56 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "cambia_questa_chiave")
 
-_db_initialized = False
 
-async def init_db_once():
-    global _db_initialized
-    if not _db_initialized:
-        from db import init_db
-        await init_db()
-        _db_initialized = True
+# ============================================================
+# DB SINCRONO — solo per la WUI
+# ============================================================
 
-def get_db_config():
-    return {
-        "host":     os.getenv("DB_HOST", "localhost"),
-        "port":     int(os.getenv("DB_PORT", 3306)),
-        "user":     os.getenv("DB_USER"),
-        "password": os.getenv("DB_PASSWORD"),
-        "db":       os.getenv("DB_NAME"),
-        "autocommit": False
-    }
+def get_conn():
+    return pymysql.connect(
+        host=os.getenv("DB_HOST", "localhost"),
+        port=int(os.getenv("DB_PORT", 3306)),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME"),
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+        autocommit=False
+    )
 
-async def query(sql, params=None, fetch=None):
-    conn = await aiomysql.connect(**get_db_config())
+def db(sql, params=None, fetch=None):
+    conn = get_conn()
     try:
-        async with conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute(sql, params or ())
+        with conn.cursor() as cur:
+            cur.execute(sql, params or ())
             if fetch == "all":
-                return await cur.fetchall()
+                return cur.fetchall()
             if fetch == "one":
-                return await cur.fetchone()
-            await conn.commit()
+                return cur.fetchone()
+            conn.commit()
             return cur.lastrowid
     finally:
         conn.close()
 
-def db(sql, params=None, fetch=None):
-    return asyncio.run(query(sql, params, fetch))
 
-def run_async(coro):
+# ============================================================
+# HELPER — chiama funzioni async da Flask
+# ============================================================
+
+def run_calcolo(coro_func, *args):
+    """Crea un event loop pulito per ogni chiamata a calcolo.py."""
     async def runner():
-        await init_db_once()
-        return await coro
-    return asyncio.run(runner())
+        from db import init_db, close_db
+        await init_db()
+        try:
+            return await coro_func(*args)
+        finally:
+            await close_db()
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(runner())
+    finally:
+        loop.close()
 
 
 # ============================================================
@@ -100,8 +110,12 @@ def utenti_modifica(id):
     gradi = db("SELECT * FROM gradi ORDER BY ordine", fetch="all")
     utente = db("SELECT * FROM utenti WHERE id = %s", (id,), fetch="one")
     if request.method == "POST":
+        telegram_id = request.form.get("telegram_id", "").strip()
+        if telegram_id and not telegram_id.isdigit():
+            flash("Errore: il Telegram ID deve essere un numero intero.")
+            return render_template("utenti_form.html", utente=utente, gradi=gradi)
         db("UPDATE utenti SET telegram_id=%s, nome=%s, username=%s, stato=%s, grado_id=%s, autonomia=%s, leadership=%s, pianificazione=%s WHERE id=%s", (
-            int(request.form["telegram_id"]) if request.form.get("telegram_id", "").strip() else None,
+            int(telegram_id) if telegram_id else None,
             request.form["nome"],
             request.form.get("username") or None,
             request.form["stato"],
@@ -111,10 +125,9 @@ def utenti_modifica(id):
             request.form["pianificazione"],
             id
         ))
-        # Ricalcola punteggio e grado
         from calcolo import ricalcola_utente, controlla_promozione_recluta
-        run_async(ricalcola_utente(id))
-        run_async(controlla_promozione_recluta(id))
+        run_calcolo(ricalcola_utente, id)
+        run_calcolo(controlla_promozione_recluta, id)
         flash("Utente aggiornato.")
         return redirect(url_for("utenti"))
     return render_template("utenti_form.html", utente=utente, gradi=gradi)
@@ -161,9 +174,8 @@ def gradi_modifica(id):
             request.form["punteggio_minimo"],
             id
         ))
-        # Ricalcola tutti perché le soglie potrebbero essere cambiate
         from calcolo import ricalcola_tutti
-        run_async(ricalcola_tutti())
+        run_calcolo(ricalcola_tutti)
         flash("Grado aggiornato.")
         return redirect(url_for("gradi"))
     return render_template("gradi_form.html", grado=grado)
