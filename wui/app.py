@@ -2,7 +2,11 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 import aiomysql
 import asyncio
 from dotenv import load_dotenv
+import sys
 import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from calcolo import ricalcola_utente, controlla_promozione_recluta
+
 
 load_dotenv()
 
@@ -95,6 +99,7 @@ def utenti_modifica(id):
             id
         ))
         flash("Utente aggiornato.")
+        db_sync(ricalcola_utente, id)
         return redirect(url_for("utenti"))
     return render_template("utenti_form.html", utente=utente, gradi=gradi)
 
@@ -196,6 +201,31 @@ def ruoli_elimina(id):
     db("DELETE FROM ruoli WHERE id = %s", (id,))
     flash("Ruolo eliminato.")
     return redirect(url_for("gradi"))
+
+
+# ============================================================
+# FUNZIONE HELPER PER ASYNC FLASK
+# ============================================================
+
+def db_sync(coro_func, *args):
+    async def runner():
+        await init_db_once()
+        return await coro_func(*args)
+    return asyncio.run(runner())
+
+
+# =============================================================
+# FLAG INIZIALIZZA POOL ONCE
+# ============================================================
+
+_db_initialized = False
+
+async def init_db_once():
+    global _db_initialized
+    if not _db_initialized:
+        from db import init_db
+        await init_db()
+        _db_initialized = True
 
 
 # ============================================================
