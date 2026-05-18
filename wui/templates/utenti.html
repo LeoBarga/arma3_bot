@@ -6,7 +6,7 @@
 </div>
 <table>
     <thead><tr>
-        <th>Nome</th><th>Username</th><th>Stato</th><th>Grado</th><th>Punteggio</th><th>Azioni</th>
+        <th>Nome</th><th>Username</th><th>Stato</th><th>Grado</th><th>Punteggio</th><th>Tag</th><th>Azioni</th>
     </tr></thead>
     <tbody>
     {% for u in utenti %}
@@ -16,6 +16,15 @@
         <td>{{ u.stato }}</td>
         <td>{{ u.grado_nome or "—" }}</td>
         <td>{{ u.punteggio }}</td>
+        <td>
+            {% if u.tag == "promuovibile" %}
+                <span style="color:#66bb6a; font-weight:bold;">▲ Promuovibile</span>
+            {% elif u.tag == "degradabile" %}
+                <span style="color:#ef5350; font-weight:bold;">▼ Degradabile</span>
+            {% else %}
+                <span style="color:#888;">—</span>
+            {% endif %}
+        </td>
         <td class="actions">
             <a href="/utenti/{{ u.id }}/modifica" class="btn btn-warning">Modifica</a>
             <form class="inline" method="post" action="/utenti/{{ u.id }}/elimina"

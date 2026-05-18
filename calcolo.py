@@ -5,7 +5,7 @@ import aiomysql
 from datetime import date
 
 # ============================================================
-# FUNZIONE PRINCIPALE — ricalcola punteggio e grado di un utente
+# FUNZIONE PRINCIPALE — ricalcola punteggio e tag di un utente
 # ============================================================
 
 async def ricalcola_utente(utente_id: int):
@@ -16,7 +16,7 @@ async def ricalcola_utente(utente_id: int):
             await cur.execute("SELECT * FROM utenti WHERE id = %s", (utente_id,))
             utente = await cur.fetchone()
             if not utente or utente["stato"] == "recluta":
-                return  # le reclute non hanno punteggio
+                return
 
             # Grado corrente
             await cur.execute("SELECT * FROM gradi WHERE id = %s", (utente["grado_id"],))
@@ -26,8 +26,6 @@ async def ricalcola_utente(utente_id: int):
             # --------------------------------------------------------
             # PRESENZE PER ANNO DI GIOCO
             # --------------------------------------------------------
-            oggi = date.today()
-
             await cur.execute("""
                 SELECT ag.id, ag.nome,
                        COUNT(p.id) as presenze
@@ -42,9 +40,9 @@ async def ricalcola_utente(utente_id: int):
             """, (utente_id,))
             anni = await cur.fetchall()
 
-            presenze_anno_attuale   = anni[0]["presenze"] if len(anni) > 0 else 0
-            presenze_anno_prec      = anni[1]["presenze"] if len(anni) > 1 else 0
-            presenze_due_anni_fa    = anni[2]["presenze"] if len(anni) > 2 else 0
+            presenze_anno_attuale = anni[0]["presenze"] if len(anni) > 0 else 0
+            presenze_anno_prec    = anni[1]["presenze"] if len(anni) > 1 else 0
+            presenze_due_anni_fa  = anni[2]["presenze"] if len(anni) > 2 else 0
 
             punteggio_presenze = (
                 presenze_anno_attuale +
@@ -111,15 +109,12 @@ async def ricalcola_utente(utente_id: int):
             leadership     = float(utente["leadership"])
             pianificazione = float(utente["pianificazione"])
 
-            # Grado corrente per la formula note
             grado_id_formula = grado["grado_id_formula"] if grado else 1
-
             media_valori = (autonomia + leadership + pianificazione) / 3
 
             if not is_ufficiale:
-                # TRUPPA
-                bonus_sl          = 30 if is_sl else 0
-                bonus_istruttore  = 20 if is_istruttore else 0
+                bonus_sl         = 30 if is_sl else 0
+                bonus_istruttore = 20 if is_istruttore else 0
 
                 punteggio = (
                     (num_qualifiche * 5) +
@@ -131,7 +126,6 @@ async def ricalcola_utente(utente_id: int):
                 ) + n_addestramento
 
             else:
-                # UFFICIALI E SOTTUFFICIALI — qualifiche non contano
                 bonus_sl         = 30 if is_sl else 0
                 bonus_istruttore = 20 if is_istruttore else 0
 
@@ -146,7 +140,7 @@ async def ricalcola_utente(utente_id: int):
             punteggio = round(punteggio)
 
             # --------------------------------------------------------
-            # DETERMINA IL GRADO
+            # DETERMINA IL TAG
             # --------------------------------------------------------
             await cur.execute("""
                 SELECT * FROM gradi
@@ -155,24 +149,33 @@ async def ricalcola_utente(utente_id: int):
                 ORDER BY punteggio_minimo DESC, ordine DESC
                 LIMIT 1
             """, (punteggio,))
-            nuovo_grado = await cur.fetchone()
+            grado_fascia = await cur.fetchone()
 
-            nuovo_grado_id = nuovo_grado["id"] if nuovo_grado else grado["id"]
+            grado_attuale_ordine = grado["ordine"] if grado else 0
+            grado_fascia_ordine  = grado_fascia["ordine"] if grado_fascia else 0
+
+            if grado_fascia_ordine > grado_attuale_ordine:
+                tag = "promuovibile"
+            elif grado_fascia_ordine < grado_attuale_ordine:
+                tag = "degradabile"
+            else:
+                tag = None
 
             # --------------------------------------------------------
-            # AGGIORNA UTENTE
+            # AGGIORNA UTENTE — solo punteggio e tag, NON il grado
             # --------------------------------------------------------
             await cur.execute("""
                 UPDATE utenti
-                SET punteggio = %s, grado_id = %s
+                SET punteggio = %s, tag = %s
                 WHERE id = %s
-            """, (punteggio, nuovo_grado_id, utente_id))
+            """, (punteggio, tag, utente_id))
             await conn.commit()
 
             return {
-                "utente_id":  utente_id,
-                "punteggio":  punteggio,
-                "grado":      nuovo_grado["nome"] if nuovo_grado else None
+                "utente_id": utente_id,
+                "punteggio": punteggio,
+                "tag":       tag,
+                "grado":     grado["nome"] if grado else None
             }
 
 
@@ -190,18 +193,17 @@ async def controlla_promozione_recluta(utente_id: int):
             )
             utente = await cur.fetchone()
             if not utente:
-                return  # non è una recluta
+                return False
 
-            # Conta presenze totali
             await cur.execute("""
                 SELECT COUNT(*) as n FROM presenze
                 WHERE utente_id = %s AND presente = TRUE
             """, (utente_id,))
             presenze = (await cur.fetchone())["n"]
 
-            # Controlla moduli obbligatori
             await cur.execute("""
-                SELECT COUNT(*) as totale FROM moduli WHERE obbligatorio = TRUE AND attivo = TRUE
+                SELECT COUNT(*) as totale FROM moduli
+                WHERE obbligatorio = TRUE AND attivo = TRUE
             """)
             totale_moduli = (await cur.fetchone())["totale"]
 
@@ -212,7 +214,6 @@ async def controlla_promozione_recluta(utente_id: int):
             moduli_completati = (await cur.fetchone())["completati"]
 
             if presenze >= 8 and moduli_completati >= totale_moduli:
-                # Prende il grado più basso della truppa (Soldato)
                 await cur.execute("""
                     SELECT id FROM gradi
                     WHERE is_ufficiale = FALSE AND ordine > 0
@@ -227,16 +228,14 @@ async def controlla_promozione_recluta(utente_id: int):
                 """, (grado_soldato["id"], utente_id))
                 await conn.commit()
 
-                # Avvia il calcolo punteggio ora che è effettivo
                 await ricalcola_utente(utente_id)
+                return True
 
-                return True  # promosso
-
-            return False  # requisiti non ancora soddisfatti
+            return False
 
 
 # ============================================================
-# RICALCOLA TUTTI — utile per aggiornamenti in batch
+# RICALCOLA TUTTI
 # ============================================================
 
 async def ricalcola_tutti():
