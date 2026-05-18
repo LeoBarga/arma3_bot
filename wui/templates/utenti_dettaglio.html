@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="top-bar">
+    <h1>{{ utente.nome }}</h1>
+    <a href="/utenti" class="btn btn-warning">← Torna alla lista</a>
+</div>
+
+<!-- INFO UTENTE -->
+<div class="card" style="margin-bottom:24px;">
+    <table style="width:auto; background:transparent;">
+        <tr><td style="padding:4px 16px 4px 0; color:#a0c4ff;">Stato</td><td>{{ utente.stato }}</td></tr>
+        <tr><td style="padding:4px 16px 4px 0; color:#a0c4ff;">Grado</td><td>{{ utente.grado_nome or "—" }}</td></tr>
+        <tr><td style="padding:4px 16px 4px 0; color:#a0c4ff;">Punteggio</td><td>{{ utente.punteggio }}</td></tr>
+        <tr><td style="padding:4px 16px 4px 0; color:#a0c4ff;">Tag</td><td>
+            {% if utente.tag == "promuovibile" %}
+                <span style="color:#66bb6a; font-weight:bold;">▲ Promuovibile</span>
+            {% elif utente.tag == "degradabile" %}
+                <span style="color:#ef5350; font-weight:bold;">▼ Degradabile</span>
+            {% else %}—{% endif %}
+        </td></tr>
+        <tr><td style="padding:4px 16px 4px 0; color:#a0c4ff;">Autonomia</td><td>{{ utente.autonomia }}</td></tr>
+        <tr><td style="padding:4px 16px 4px 0; color:#a0c4ff;">Leadership</td><td>{{ utente.leadership }}</td></tr>
+        <tr><td style="padding:4px 16px 4px 0; color:#a0c4ff;">Pianificazione</td><td>{{ utente.pianificazione }}</td></tr>
+    </table>
+    <div style="margin-top:12px;">
+        <a href="/utenti/{{ utente.id }}/modifica" class="btn btn-warning">Modifica dati</a>
+    </div>
+</div>
+
+<!-- RUOLI -->
+<h2 style="margin-bottom:12px; font-size:18px;">Ruoli</h2>
+<div class="card" style="margin-bottom:24px;">
+    {% if ruoli_utente %}
+    <table style="margin-bottom:16px;">
+        <thead><tr>
+            <th>Ruolo</th><th>Stato</th><th>Azioni</th>
+        </tr></thead>
+        <tbody>
+        {% for ur in ruoli_utente %}
+        <tr>
+            <td>{{ ur.ruolo_nome }}</td>
+            <td>
+                <form method="post" action="/utenti/{{ utente.id }}/ruolo/{{ ur.ruolo_id }}/stato" style="display:flex; gap:6px;">
+                    <select name="stato" style="width:auto;">
+                        {% for s in ['non_acquisito','in_corso','ottenuto'] %}
+                        <option value="{{ s }}" {{ 'selected' if ur.stato == s }}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-primary" type="submit">Salva</button>
+                </form>
+            </td>
+            <td>
+                <form method="post" action="/utenti/{{ utente.id }}/ruolo/{{ ur.ruolo_id }}/elimina"
+                      onsubmit="return confirm('Rimuovere questo ruolo?')">
+                    <button class="btn btn-danger">Rimuovi</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:#888; margin-bottom:16px;">Nessun ruolo assegnato.</p>
+    {% endif %}
+
+    {% if ruoli_disponibili %}
+    <form method="post" action="/utenti/{{ utente.id }}/ruolo/aggiungi" style="display:flex; gap:8px; align-items:center;">
+        <select name="ruolo_id" style="width:auto;">
+            <option value="">— seleziona ruolo —</option>
+            {% for r in ruoli_disponibili %}
+            <option value="{{ r.id }}">{{ r.nome }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary" type="submit">+ Aggiungi</button>
+    </form>
+    {% endif %}
+</div>
+
+<!-- NOTE -->
+<h2 style="margin-bottom:12px; font-size:18px;">Note merito / demerito</h2>
+<div class="card">
+    {% if note_utente %}
+    <table style="margin-bottom:16px;">
+        <thead><tr>
+            <th>Tipo</th><th>Testo</th><th>Data</th><th>Inserito da</th><th></th>
+        </tr></thead>
+        <tbody>
+        {% for n in note_utente %}
+        <tr>
+            <td>
+                {% if n.tipo == "merito" %}
+                    <span style="color:#66bb6a; font-weight:bold;">▲ Merito</span>
+                {% else %}
+                    <span style="color:#ef5350; font-weight:bold;">▼ Demerito</span>
+                {% endif %}
+            </td>
+            <td>{{ n.testo }}</td>
+            <td>{{ n.inserito_il.strftime('%d/%m/%Y') if n.inserito_il else "—" }}</td>
+            <td>{{ n.inserito_da_nome or "—" }}</td>
+            <td>
+                <form method="post" action="/utenti/{{ utente.id }}/nota/{{ n.id }}/elimina"
+                      onsubmit="return confirm('Eliminare questa nota?')">
+                    <button class="btn btn-danger">Elimina</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <form method="post" action="/utenti/{{ utente.id }}/nota/aggiungi">
+        <div style="display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap;">
+            <select name="tipo" style="width:auto;">
+                <option value="merito">▲ Merito</option>
+                <option value="demerito">▼ Demerito</option>
+            </select>
+            <textarea name="testo" rows="2" placeholder="Testo della nota..." style="flex:1; min-width:200px;"></textarea>
+            <button class="btn btn-primary" type="submit">+ Aggiungi</button>
+        </div>
+    </form>
+</div>
+
+{% endblock %}
