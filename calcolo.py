@@ -151,7 +151,8 @@ async def ricalcola_utente(utente_id: int):
             await cur.execute("""
                 SELECT * FROM gradi
                 WHERE punteggio_minimo <= %s
-                ORDER BY punteggio_minimo DESC
+                AND ordine > 0
+                ORDER BY punteggio_minimo DESC, ordine DESC
                 LIMIT 1
             """, (punteggio,))
             nuovo_grado = await cur.fetchone()
