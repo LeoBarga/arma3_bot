@@ -1,17 +1,25 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 import aiomysql
 import asyncio
-from dotenv import load_dotenv
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from calcolo import ricalcola_utente, controlla_promozione_recluta
 
-
+from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "cambia_questa_chiave")
+
+_db_initialized = False
+
+async def init_db_once():
+    global _db_initialized
+    if not _db_initialized:
+        from db import init_db
+        await init_db()
+        _db_initialized = True
 
 def get_db_config():
     return {
@@ -40,6 +48,12 @@ async def query(sql, params=None, fetch=None):
 def db(sql, params=None, fetch=None):
     return asyncio.run(query(sql, params, fetch))
 
+def run_async(coro):
+    async def runner():
+        await init_db_once()
+        return await coro
+    return asyncio.run(runner())
+
 
 # ============================================================
 # INDEX
@@ -56,7 +70,10 @@ def index():
 
 @app.route("/utenti")
 def utenti():
-    rows = db("SELECT u.*, g.nome as grado_nome FROM utenti u LEFT JOIN gradi g ON u.grado_id = g.id ORDER BY u.nome", fetch="all")
+    rows = db(
+        "SELECT u.*, g.nome as grado_nome FROM utenti u LEFT JOIN gradi g ON u.grado_id = g.id ORDER BY u.nome",
+        fetch="all"
+    )
     return render_template("utenti.html", utenti=rows)
 
 @app.route("/utenti/nuovo", methods=["GET","POST"])
@@ -68,10 +85,10 @@ def utenti_nuovo():
             flash("Errore: il Telegram ID deve essere un numero intero.")
             return render_template("utenti_form.html", utente=None, gradi=gradi)
         db("INSERT INTO utenti (telegram_id, nome, username, stato, grado_id) VALUES (%s,%s,%s,%s,%s)", (
-            request.form.get("telegram_id") or None,
+            int(telegram_id) if telegram_id else None,
             request.form["nome"],
             request.form.get("username") or None,
-            request.form["stato"],
+            "recluta",
             request.form.get("grado_id") or None
         ))
         flash("Utente creato.")
@@ -83,12 +100,8 @@ def utenti_modifica(id):
     gradi = db("SELECT * FROM gradi ORDER BY ordine", fetch="all")
     utente = db("SELECT * FROM utenti WHERE id = %s", (id,), fetch="one")
     if request.method == "POST":
-        telegram_id = request.form.get("telegram_id", "").strip()
-        if telegram_id and not telegram_id.isdigit():
-            flash("Errore: il Telegram ID deve essere un numero intero.")
-            return render_template("utenti_form.html", utente=None, gradi=gradi)
         db("UPDATE utenti SET telegram_id=%s, nome=%s, username=%s, stato=%s, grado_id=%s, autonomia=%s, leadership=%s, pianificazione=%s WHERE id=%s", (
-            request.form.get("telegram_id") or None,
+            int(request.form["telegram_id"]) if request.form.get("telegram_id", "").strip() else None,
             request.form["nome"],
             request.form.get("username") or None,
             request.form["stato"],
@@ -98,8 +111,11 @@ def utenti_modifica(id):
             request.form["pianificazione"],
             id
         ))
+        # Ricalcola punteggio e grado
+        from calcolo import ricalcola_utente, controlla_promozione_recluta
+        run_async(ricalcola_utente(id))
+        run_async(controlla_promozione_recluta(id))
         flash("Utente aggiornato.")
-        db_sync(ricalcola_utente, id)
         return redirect(url_for("utenti"))
     return render_template("utenti_form.html", utente=utente, gradi=gradi)
 
@@ -145,6 +161,9 @@ def gradi_modifica(id):
             request.form["punteggio_minimo"],
             id
         ))
+        # Ricalcola tutti perché le soglie potrebbero essere cambiate
+        from calcolo import ricalcola_tutti
+        run_async(ricalcola_tutti())
         flash("Grado aggiornato.")
         return redirect(url_for("gradi"))
     return render_template("gradi_form.html", grado=grado)
@@ -162,7 +181,10 @@ def gradi_elimina(id):
 
 @app.route("/ruoli")
 def ruoli():
-    rows = db("SELECT r.*, g.nome as grado_nome FROM ruoli r LEFT JOIN gradi g ON r.grado_minimo_id = g.id ORDER BY r.nome", fetch="all")
+    rows = db(
+        "SELECT r.*, g.nome as grado_nome FROM ruoli r LEFT JOIN gradi g ON r.grado_minimo_id = g.id ORDER BY r.nome",
+        fetch="all"
+    )
     return render_template("ruoli.html", ruoli=rows)
 
 @app.route("/ruoli/nuovo", methods=["GET","POST"])
@@ -200,32 +222,7 @@ def ruoli_modifica(id):
 def ruoli_elimina(id):
     db("DELETE FROM ruoli WHERE id = %s", (id,))
     flash("Ruolo eliminato.")
-    return redirect(url_for("gradi"))
-
-
-# ============================================================
-# FUNZIONE HELPER PER ASYNC FLASK
-# ============================================================
-
-def db_sync(coro_func, *args):
-    async def runner():
-        await init_db_once()
-        return await coro_func(*args)
-    return asyncio.run(runner())
-
-
-# =============================================================
-# FLAG INIZIALIZZA POOL ONCE
-# ============================================================
-
-_db_initialized = False
-
-async def init_db_once():
-    global _db_initialized
-    if not _db_initialized:
-        from db import init_db
-        await init_db()
-        _db_initialized = True
+    return redirect(url_for("ruoli"))
 
 
 # ============================================================
