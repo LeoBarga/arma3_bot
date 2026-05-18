@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="top-bar">
+    <h1>Partite</h1>
+    <a href="/partite/nuova" class="btn btn-primary">+ Nuova</a>
+</div>
+<table>
+    <thead><tr>
+        <th>Nome</th><th>Data</th><th>Anno</th><th>Addestramento</th><th>Azioni</th>
+    </tr></thead>
+    <tbody>
+    {% for p in partite %}
+    <tr>
+        <td>{{ p.nome }}</td>
+        <td>{{ p.data_ora.strftime('%d/%m/%Y %H:%M') if p.data_ora else "—" }}</td>
+        <td>{{ p.anno_nome }}</td>
+        <td>{{ "Sì" if p.is_addestramento else "No" }}</td>
+        <td class="actions">
+            <a href="/partite/{{ p.id }}/presenze" class="btn btn-primary">Presenze</a>
+            <a href="/partite/{{ p.id }}/modifica" class="btn btn-warning">Modifica</a>
+            <form class="inline" method="post" action="/partite/{{ p.id }}/elimina"
+                  onsubmit="return confirm('Eliminare questa partita?')">
+                <button class="btn btn-danger">Elimina</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

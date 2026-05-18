@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="top-bar">
+    <h1>Presenze — {{ partita.nome }}</h1>
+    <a href="/partite" class="btn btn-warning">← Torna alle partite</a>
+</div>
+<form method="post" action="/partite/{{ partita.id }}/presenze/salva">
+<div class="card">
+    <table>
+        <thead><tr>
+            <th>Nome</th><th>Username</th><th>Presente</th>
+        </tr></thead>
+        <tbody>
+        {% for p in presenze %}
+        <tr>
+            <td>{{ p.nome }}</td>
+            <td>{{ p.username or "—" }}</td>
+            <td>
+                <input type="checkbox" name="presenti" value="{{ p.id }}"
+                       {{ 'checked' if p.presente }}>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <div style="margin-top:16px;">
+        <button class="btn btn-primary" type="submit">Salva presenze</button>
+    </div>
+</div>
+</form>
+{% endblock %}

@@ -315,6 +315,151 @@ def ruoli_elimina(id):
     flash("Ruolo eliminato.")
     return redirect(url_for("ruoli"))
 
+# ============================================================
+# ANNI DI GIOCO
+# ============================================================
+
+@app.route("/anni")
+def anni():
+    rows = db("SELECT * FROM anni_gioco ORDER BY data_inizio DESC", fetch="all")
+    return render_template("anni.html", anni=rows)
+
+@app.route("/anni/nuovo", methods=["GET","POST"])
+def anni_nuovo():
+    if request.method == "POST":
+        db("INSERT INTO anni_gioco (nome, data_inizio, data_fine, attivo) VALUES (%s,%s,%s,%s)", (
+            request.form["nome"],
+            request.form["data_inizio"],
+            request.form["data_fine"],
+            1 if request.form.get("attivo") else 0
+        ))
+        flash("Anno di gioco creato.")
+        return redirect(url_for("anni"))
+    return render_template("anni_form.html", anno=None)
+
+@app.route("/anni/<int:id>/modifica", methods=["GET","POST"])
+def anni_modifica(id):
+    anno = db("SELECT * FROM anni_gioco WHERE id = %s", (id,), fetch="one")
+    if request.method == "POST":
+        db("UPDATE anni_gioco SET nome=%s, data_inizio=%s, data_fine=%s, attivo=%s WHERE id=%s", (
+            request.form["nome"],
+            request.form["data_inizio"],
+            request.form["data_fine"],
+            1 if request.form.get("attivo") else 0,
+            id
+        ))
+        flash("Anno di gioco aggiornato.")
+        return redirect(url_for("anni"))
+    return render_template("anni_form.html", anno=anno)
+
+@app.route("/anni/<int:id>/elimina", methods=["POST"])
+def anni_elimina(id):
+    # Elimina in cascata: presenze → partite → anno
+    partite_anno = db("SELECT id FROM partite WHERE anno_gioco_id = %s", (id,), fetch="all")
+    for p in partite_anno:
+        db("DELETE FROM presenze WHERE partita_id = %s", (p["id"],))
+    db("DELETE FROM partite WHERE anno_gioco_id = %s", (id,))
+    db("DELETE FROM anni_gioco WHERE id = %s", (id,))
+    flash("Anno eliminato.")
+    return redirect(url_for("anni"))
+
+
+# ============================================================
+# PARTITE
+# ============================================================
+
+@app.route("/partite")
+def partite():
+    rows = db("""
+        SELECT p.*, a.nome as anno_nome
+        FROM partite p
+        JOIN anni_gioco a ON p.anno_gioco_id = a.id
+        ORDER BY p.data_ora DESC
+    """, fetch="all")
+    return render_template("partite.html", partite=rows)
+
+@app.route("/partite/nuova", methods=["GET","POST"])
+def partite_nuova():
+    anni = db("SELECT * FROM anni_gioco ORDER BY data_inizio DESC", fetch="all")
+    if request.method == "POST":
+        db("INSERT INTO partite (nome, data_ora, anno_gioco_id, is_addestramento) VALUES (%s,%s,%s,%s)", (
+            request.form["nome"],
+            request.form["data_ora"],
+            request.form["anno_gioco_id"],
+            1 if request.form.get("is_addestramento") else 0
+        ))
+        flash("Partita creata.")
+        return redirect(url_for("partite"))
+    return render_template("partite_form.html", partita=None, anni=anni)
+
+@app.route("/partite/<int:id>/modifica", methods=["GET","POST"])
+def partite_modifica(id):
+    anni   = db("SELECT * FROM anni_gioco ORDER BY data_inizio DESC", fetch="all")
+    partita = db("SELECT * FROM partite WHERE id = %s", (id,), fetch="one")
+    if request.method == "POST":
+        db("UPDATE partite SET nome=%s, data_ora=%s, anno_gioco_id=%s, is_addestramento=%s WHERE id=%s", (
+            request.form["nome"],
+            request.form["data_ora"],
+            request.form["anno_gioco_id"],
+            1 if request.form.get("is_addestramento") else 0,
+            id
+        ))
+        flash("Partita aggiornata.")
+        return redirect(url_for("partite"))
+    return render_template("partite_form.html", partita=partita, anni=anni)
+
+@app.route("/partite/<int:id>/elimina", methods=["POST"])
+def partite_elimina(id):
+    db("DELETE FROM presenze WHERE partita_id = %s", (id,))
+    db("DELETE FROM partite WHERE id = %s", (id,))
+    flash("Partita eliminata.")
+    return redirect(url_for("partite"))
+
+
+# ============================================================
+# PRESENZE
+# ============================================================
+
+@app.route("/partite/<int:id>/presenze")
+def partite_presenze(id):
+    partita = db("SELECT * FROM partite WHERE id = %s", (id,), fetch="one")
+    if not partita:
+        flash("Partita non trovata.")
+        return redirect(url_for("partite"))
+
+    presenze = db("""
+        SELECT u.id, u.nome, u.username,
+               COALESCE(p.presente, FALSE) as presente
+        FROM utenti u
+        LEFT JOIN presenze p ON p.utente_id = u.id AND p.partita_id = %s
+        WHERE u.stato = 'effettivo'
+        ORDER BY u.nome
+    """, (id,), fetch="all")
+
+    return render_template("partite_presenze.html", partita=partita, presenze=presenze)
+
+@app.route("/partite/<int:id>/presenze/salva", methods=["POST"])
+def partite_presenze_salva(id):
+    effettivi = db("SELECT id FROM utenti WHERE stato = 'effettivo'", fetch="all")
+    presenti  = request.form.getlist("presenti")
+
+    for u in effettivi:
+        uid      = u["id"]
+        presente = 1 if str(uid) in presenti else 0
+        db("""
+            INSERT INTO presenze (partita_id, utente_id, presente)
+            VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE presente = VALUES(presente)
+        """, (id, uid, presente))
+
+    # Ricalcola punteggio per tutti gli effettivi
+    from calcolo import ricalcola_utente
+    for u in effettivi:
+        run_calcolo(ricalcola_utente, u["id"])
+
+    flash("Presenze salvate.")
+    return redirect(url_for("partite_presenze", id=id))
+
 
 # ============================================================
 # AVVIO

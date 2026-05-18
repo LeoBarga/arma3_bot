@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="top-bar">
+    <h1>Anni di gioco</h1>
+    <a href="/anni/nuovo" class="btn btn-primary">+ Nuovo</a>
+</div>
+<table>
+    <thead><tr>
+        <th>Nome</th><th>Inizio</th><th>Fine</th><th>Attivo</th><th>Azioni</th>
+    </tr></thead>
+    <tbody>
+    {% for a in anni %}
+    <tr>
+        <td>{{ a.nome }}</td>
+        <td>{{ a.data_inizio.strftime('%d/%m/%Y') if a.data_inizio else "—" }}</td>
+	<td>{{ a.data_fine.strftime('%d/%m/%Y') if a.data_fine else "—" }}</td>
+        <td>{{ "Sì" if a.attivo else "No" }}</td>
+        <td class="actions">
+            <a href="/anni/{{ a.id }}/modifica" class="btn btn-warning">Modifica</a>
+            <form class="inline" method="post" action="/anni/{{ a.id }}/elimina"onsubmit="return confirm('Eliminare questo anno e tutte le partite collegate?')"> 
+                <button class="btn btn-danger">Elimina</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

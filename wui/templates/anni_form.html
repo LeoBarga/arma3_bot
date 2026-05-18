@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ "Modifica" if anno else "Nuovo" }} Anno di gioco</h1>
+<div class="card" style="margin-top:20px; max-width:500px;">
+<form method="post">
+    <div class="form-group">
+        <label>Nome * (es. 2024-2025)</label>
+        <input name="nome" value="{{ anno.nome if anno else '' }}" required>
+    </div>
+    <div class="form-group">
+        <label>Data inizio *</label>
+        <input name="data_inizio" type="date" value="{{ anno.data_inizio if anno else '' }}" required>
+    </div>
+    <div class="form-group">
+        <label>Data fine *</label>
+        <input name="data_fine" type="date" value="{{ anno.data_fine if anno else '' }}" required>
+    </div>
+    <div class="form-group">
+        <label><input type="checkbox" name="attivo" {{ 'checked' if anno and anno.attivo }}> Anno corrente</label>
+    </div>
+    <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Salva</button>
+        <a href="/anni" class="btn btn-warning">Annulla</a>
+    </div>
+</form>
+</div>
+{% endblock %}
