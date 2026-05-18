@@ -28,6 +28,66 @@
     </div>
 </div>
 
+<!-- BANNER PROMOZIONE -->
+{% if utente.stato == 'recluta' %}
+    {% if utente.pronta_promozione %}
+    <div style="background:#2e7d32; padding:12px 16px; border-radius:4px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
+        <span>✅ Questa recluta ha completato tutti i requisiti ed è pronta per la promozione.</span>
+        <form method="post" action="/utenti/{{ utente.id }}/promuovi"
+              onsubmit="return confirm('Promuovere questa recluta a effettivo?')">
+            <button class="btn btn-primary" type="submit">▲ Promuovi a effettivo</button>
+        </form>
+    </div>
+    {% else %}
+    <div style="background:#1a237e; padding:12px 16px; border-radius:4px; margin-bottom:16px;">
+        ⏳ Recluta — requisiti non ancora completati.
+    </div>
+    {% endif %}
+{% endif %}
+
+<!-- SEZIONE MODULI -->
+{% if utente.stato == 'recluta' %}
+<h2 style="margin-bottom:12px; font-size:18px; margin-top:24px;">Moduli recluta</h2>
+<div class="card">
+    {% if moduli_utente %}
+    <table style="margin-bottom:16px;">
+        <thead><tr>
+            <th>Modulo</th>
+            <th>Obbligatorio</th>
+            <th>Stato</th>
+            <th>Completato il</th>
+        </tr></thead>
+        <tbody>
+        {% for m in moduli_utente %}
+        <tr>
+            <td>{{ m.modulo_nome }}</td>
+            <td>{{ "Sì" if m.obbligatorio else "No" }}</td>
+            <td>
+                {% if m.stato == 'completato' %}
+                    <span style="color:#66bb6a; font-weight:bold;">✅ Completato</span>
+                    <form method="post" action="/utenti/{{ utente.id }}/modulo/{{ m.modulo_id }}/stato" style="display:inline; margin-left:8px;">
+                        <input type="hidden" name="stato" value="non_completato">
+                        <button class="btn btn-danger" type="submit" style="font-size:11px; padding:3px 8px;">Annulla</button>
+                    </form>
+                {% else %}
+                    <span style="color:#888;">⏳ Non completato</span>
+                    <form method="post" action="/utenti/{{ utente.id }}/modulo/{{ m.modulo_id }}/stato" style="display:inline; margin-left:8px;">
+                        <input type="hidden" name="stato" value="completato">
+                        <button class="btn btn-primary" type="submit" style="font-size:11px; padding:3px 8px;">✔ Segna completato</button>
+                    </form>
+                {% endif %}
+            </td>
+            <td>{{ m.completato_il.strftime('%d/%m/%Y') if m.completato_il else "—" }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:#888;">Nessun modulo assegnato.</p>
+    {% endif %}
+</div>
+{% endif %}
+
 <!-- RUOLI -->
 <h2 style="margin-bottom:12px; font-size:18px;">Ruoli</h2>
 <div class="card" style="margin-bottom:24px;">

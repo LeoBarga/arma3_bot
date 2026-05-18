@@ -19,24 +19,26 @@
     	<label>Stato</label>
     	{% if utente %}
     	<select name="stato">
-        	{% for s in ['recluta','effettivo','inattivo'] %}
-        	<option value="{{ s }}" {{ 'selected' if utente.stato == s }}>{{ s }}</option>
-        	{% endfor %}
-  	</select>
-        {% else %}
-        <input type="hidden" name="stato" value="recluta">
-        <input type="text" value="recluta" disabled>
-        {% endif %}
-    </div>	
+       	    {% for s in ['recluta','effettivo','inattivo'] %}
+            <option value="{{ s }}" {{ 'selected' if utente.stato == s }}>{{ s }}</option>
+            {% endfor %}
+    	</select>
+    	{% else %}
+    	<input type="hidden" name="stato" value="recluta">
+    	<input type="text" value="recluta" disabled>
+    	{% endif %}
+    </div>
+    {% if utente %}
     <div class="form-group">
         <label>Grado</label>
         <select name="grado_id">
             <option value="">— nessuno —</option>
             {% for g in gradi %}
-            <option value="{{ g.id }}" {{ 'selected' if utente and utente.grado_id == g.id }}>{{ g.nome }}</option>
+            <option value="{{ g.id }}" {{ 'selected' if utente.grado_id == g.id }}>{{ g.nome }}</option>
             {% endfor %}
         </select>
     </div>
+    {% endif %}
     {% if utente %}
     <div class="form-group">
         <label>Autonomia (1.0 - 1.5)</label>

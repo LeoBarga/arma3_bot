@@ -88,22 +88,40 @@ def utenti():
 
 @app.route("/utenti/nuovo", methods=["GET","POST"])
 def utenti_nuovo():
-    gradi = db("SELECT * FROM gradi ORDER BY ordine", fetch="all")
     if request.method == "POST":
         telegram_id = request.form.get("telegram_id", "").strip()
         if telegram_id and not telegram_id.isdigit():
             flash("Errore: il Telegram ID deve essere un numero intero.")
-            return render_template("utenti_form.html", utente=None, gradi=gradi)
-        db("INSERT INTO utenti (telegram_id, nome, username, stato, grado_id) VALUES (%s,%s,%s,%s,%s)", (
-            int(telegram_id) if telegram_id else None,
-            request.form["nome"],
-            request.form.get("username") or None,
-            "recluta",
-            request.form.get("grado_id") or None
-        ))
+            return render_template("utenti_form.html", utente=None, gradi=[])
+
+        grado_recluta = db("SELECT id FROM gradi WHERE ordine = 0", fetch="one")
+
+        utente_id = db(
+            "INSERT INTO utenti (telegram_id, nome, username, stato, grado_id) VALUES (%s,%s,%s,%s,%s)",
+            (
+                int(telegram_id) if telegram_id else None,
+                request.form["nome"],
+                request.form.get("username") or None,
+                "recluta",
+                grado_recluta["id"] if grado_recluta else None
+            )
+        )
+
+        # Assegna automaticamente tutti i moduli obbligatori
+        moduli_obbligatori = db(
+            "SELECT id FROM moduli WHERE obbligatorio = TRUE AND attivo = TRUE",
+            fetch="all"
+        )
+        for m in moduli_obbligatori:
+            db(
+                "INSERT IGNORE INTO reclute_moduli (utente_id, modulo_id, stato) VALUES (%s,%s,'non_completato')",
+                (utente_id, m["id"])
+            )
+
         flash("Utente creato.")
         return redirect(url_for("utenti"))
-    return render_template("utenti_form.html", utente=None, gradi=gradi)
+
+    return render_template("utenti_form.html", utente=None, gradi=[])
 
 @app.route("/utenti/<int:id>/modifica", methods=["GET","POST"])
 def utenti_modifica(id):
@@ -131,6 +149,28 @@ def utenti_modifica(id):
         flash("Utente aggiornato.")
         return redirect(url_for("utenti"))
     return render_template("utenti_form.html", utente=utente, gradi=gradi)
+
+@app.route("/utenti/<int:id>/promuovi", methods=["POST"])
+def utenti_promuovi(id):
+    utente = db("SELECT * FROM utenti WHERE id = %s AND stato = 'recluta'", (id,), fetch="one")
+    if not utente or not utente["pronta_promozione"]:
+        flash("Utente non idoneo alla promozione.")
+        return redirect(url_for("utenti_dettaglio", id=id))
+
+    grado_soldato = db("""
+        SELECT id FROM gradi
+        WHERE is_ufficiale = FALSE AND ordine > 0
+        ORDER BY ordine ASC LIMIT 1
+    """, fetch="one")
+
+    db("UPDATE utenti SET stato = 'effettivo', grado_id = %s, pronta_promozione = FALSE WHERE id = %s",
+       (grado_soldato["id"], id))
+
+    from calcolo import ricalcola_utente
+    run_calcolo(ricalcola_utente, id)
+
+    flash(f"Utente promosso a effettivo con grado Soldato.")
+    return redirect(url_for("utenti_dettaglio", id=id))
 
 @app.route("/utenti/<int:id>/elimina", methods=["POST"])
 def utenti_elimina(id):
@@ -170,11 +210,31 @@ def utenti_dettaglio(id):
         ORDER BY n.inserito_il DESC
     """, (id,), fetch="all")
 
+    moduli_utente = db("""
+        SELECT rm.*, m.nome as modulo_nome, m.obbligatorio
+        FROM reclute_moduli rm
+        JOIN moduli m ON rm.modulo_id = m.id
+        WHERE rm.utente_id = %s
+        ORDER BY m.nome
+    """, (id,), fetch="all")
+
+    moduli_disponibili = db("""
+        SELECT * FROM moduli
+        WHERE attivo = TRUE
+        AND id NOT IN (
+            SELECT modulo_id FROM reclute_moduli WHERE utente_id = %s
+        )
+        ORDER BY nome
+    """, (id,), fetch="all")
+
+
     return render_template("utenti_dettaglio.html",
         utente=utente,
         ruoli_utente=ruoli_utente,
         ruoli_disponibili=ruoli_disponibili,
-        note_utente=note_utente
+        note_utente=note_utente,
+	moduli_utente=moduli_utente,
+	moduli_disponibili=moduli_disponibili
     )
 
 @app.route("/utenti/<int:id>/ruolo/aggiungi", methods=["POST"])
@@ -215,6 +275,20 @@ def utenti_nota_elimina(id, nota_id):
     db("DELETE FROM note WHERE id = %s AND utente_id = %s", (nota_id, id))
     from calcolo import ricalcola_utente
     run_calcolo(ricalcola_utente, id)
+    return redirect(url_for("utenti_dettaglio", id=id))
+
+@app.route("/utenti/<int:id>/modulo/<int:modulo_id>/stato", methods=["POST"])
+def utenti_modulo_stato(id, modulo_id):
+    stato = request.form.get("stato")
+    if stato in ("non_completato", "completato"):
+        if stato == "completato":
+            db("UPDATE reclute_moduli SET stato = %s, completato_il = NOW() WHERE utente_id = %s AND modulo_id = %s",
+               (stato, id, modulo_id))
+        else:
+            db("UPDATE reclute_moduli SET stato = %s, completato_il = NULL WHERE utente_id = %s AND modulo_id = %s",
+               (stato, id, modulo_id))
+        from calcolo import controlla_promozione_recluta
+        run_calcolo(controlla_promozione_recluta, id)
     return redirect(url_for("utenti_dettaglio", id=id))
 
 
@@ -432,7 +506,7 @@ def partite_presenze(id):
                COALESCE(p.presente, FALSE) as presente
         FROM utenti u
         LEFT JOIN presenze p ON p.utente_id = u.id AND p.partita_id = %s
-        WHERE u.stato = 'effettivo'
+        WHERE u.stato = 'effettivo' OR u.stato = 'recluta'
         ORDER BY u.nome
     """, (id,), fetch="all")
 
@@ -440,7 +514,7 @@ def partite_presenze(id):
 
 @app.route("/partite/<int:id>/presenze/salva", methods=["POST"])
 def partite_presenze_salva(id):
-    effettivi = db("SELECT id FROM utenti WHERE stato = 'effettivo'", fetch="all")
+    effettivi = db("SELECT id FROM utenti WHERE stato IN ('effettivo', 'recluta')", fetch="all")
     presenti  = request.form.getlist("presenti")
 
     for u in effettivi:
@@ -452,10 +526,13 @@ def partite_presenze_salva(id):
             ON DUPLICATE KEY UPDATE presente = VALUES(presente)
         """, (id, uid, presente))
 
-    # Ricalcola punteggio per tutti gli effettivi
-    from calcolo import ricalcola_utente
+    from calcolo import ricalcola_utente, controlla_promozione_recluta
     for u in effettivi:
-        run_calcolo(ricalcola_utente, u["id"])
+        utente = db("SELECT stato FROM utenti WHERE id = %s", (u["id"],), fetch="one")
+        if utente["stato"] == "recluta":
+            run_calcolo(controlla_promozione_recluta, u["id"])
+        else:
+            run_calcolo(ricalcola_utente, u["id"])
 
     flash("Presenze salvate.")
     return redirect(url_for("partite_presenze", id=id))

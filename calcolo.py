@@ -180,7 +180,7 @@ async def ricalcola_utente(utente_id: int):
 
 
 # ============================================================
-# PROMOZIONE RECLUTA → EFFETTIVO
+# CONTROLLO STATUS RECLUTA
 # ============================================================
 
 async def controlla_promozione_recluta(utente_id: int):
@@ -195,12 +195,14 @@ async def controlla_promozione_recluta(utente_id: int):
             if not utente:
                 return False
 
+            # Conta presenze totali
             await cur.execute("""
                 SELECT COUNT(*) as n FROM presenze
                 WHERE utente_id = %s AND presente = TRUE
             """, (utente_id,))
             presenze = (await cur.fetchone())["n"]
 
+            # Controlla moduli obbligatori
             await cur.execute("""
                 SELECT COUNT(*) as totale FROM moduli
                 WHERE obbligatorio = TRUE AND attivo = TRUE
@@ -213,25 +215,14 @@ async def controlla_promozione_recluta(utente_id: int):
             """, (utente_id,))
             moduli_completati = (await cur.fetchone())["completati"]
 
-            if presenze >= 8 and moduli_completati >= totale_moduli:
-                await cur.execute("""
-                    SELECT id FROM gradi
-                    WHERE is_ufficiale = FALSE AND ordine > 0
-                    ORDER BY ordine ASC LIMIT 1
-                """)
-                grado_soldato = await cur.fetchone()
+            pronta = presenze >= 8 and moduli_completati >= totale_moduli
 
-                await cur.execute("""
-                    UPDATE utenti
-                    SET stato = 'effettivo', grado_id = %s
-                    WHERE id = %s
-                """, (grado_soldato["id"], utente_id))
-                await conn.commit()
+            await cur.execute("""
+                UPDATE utenti SET pronta_promozione = %s WHERE id = %s
+            """, (1 if pronta else 0, utente_id))
+            await conn.commit()
 
-                await ricalcola_utente(utente_id)
-                return True
-
-            return False
+            return pronta
 
 
 # ============================================================
