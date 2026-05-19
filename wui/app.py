@@ -182,11 +182,14 @@ def utenti_nuovo():
 def utenti_modifica(id):
     gradi = db("SELECT * FROM gradi ORDER BY ordine", fetch="all")
     utente = db("SELECT * FROM utenti WHERE id = %s", (id,), fetch="one")
+    permessi = db("SELECT permesso FROM utenti_permessi WHERE utente_id = %s", (id,), fetch="all")
+    is_istruttore = any(p["permesso"] == "istruttore" for p in permessi)
+
     if request.method == "POST":
         telegram_id = request.form.get("telegram_id", "").strip()
         if telegram_id and not telegram_id.isdigit():
             flash("Errore: il Telegram ID deve essere un numero intero.")
-            return render_template("utenti_form.html", utente=utente, gradi=gradi)
+            return render_template("utenti_form.html", utente=utente, gradi=gradi, is_istruttore=is_istruttore)
         db("UPDATE utenti SET telegram_id=%s, nome=%s, username=%s, stato=%s, grado_id=%s, autonomia=%s, leadership=%s, pianificazione=%s WHERE id=%s", (
             int(telegram_id) if telegram_id else None,
             request.form["nome"],
@@ -198,12 +201,18 @@ def utenti_modifica(id):
             request.form["pianificazione"],
             id
         ))
+
+        if request.form.get("is_istruttore"):
+            db("INSERT IGNORE INTO utenti_permessi (utente_id, permesso) VALUES (%s, 'istruttore')", (id,))
+        else:
+            db("DELETE FROM utenti_permessi WHERE utente_id = %s AND permesso = 'istruttore'", (id,))
+
         from calcolo import ricalcola_utente, controlla_promozione_recluta
         run_calcolo(ricalcola_utente, id)
         run_calcolo(controlla_promozione_recluta, id)
         flash("Utente aggiornato.")
         return redirect(url_for("utenti"))
-    return render_template("utenti_form.html", utente=utente, gradi=gradi)
+    return render_template("utenti_form.html", utente=utente, gradi=gradi, is_istruttore=is_istruttore)
 
 @app.route("/utenti/<int:id>/promuovi", methods=["POST"])
 def utenti_promuovi(id):
