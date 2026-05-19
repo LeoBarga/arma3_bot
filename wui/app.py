@@ -4,8 +4,12 @@ import pymysql.cursors
 import asyncio
 import sys
 import os
+import bcrypt
 
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 import hashlib
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -18,6 +22,8 @@ app.secret_key = os.getenv("SECRET_KEY", "cambia_questa_chiave")
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
+
+limiter = Limiter(get_remote_address, app=app, default_limits=[])
 
 class WuiUtente(UserMixin):
     def __init__(self, id, username):
@@ -102,18 +108,16 @@ def index():
 # ============================================================
 
 @app.route("/login", methods=["GET","POST"])
+@limiter.limit("10 per minute")
 def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 
         row = db("SELECT * FROM wui_utenti WHERE username = %s", (username,), fetch="one")
-        if row:
-            salt, hash_salvato = row["password_hash"].split(":")
-            hash_inserito = hashlib.sha256((salt + password).encode()).hexdigest()
-            if hash_inserito == hash_salvato:
-                login_user(WuiUtente(row["id"], row["username"]))
-                return redirect(url_for("index"))
+        if row and bcrypt.checkpw(password.encode(), row["password_hash"].encode()):
+    	    login_user(WuiUtente(row["id"], row["username"]))
+    	    return redirect(url_for("index"))
 
         flash("Credenziali non valide.")
     return render_template("login.html")
