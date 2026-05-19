@@ -23,7 +23,7 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 
-limiter = Limiter(get_remote_address, app=app, default_limits=[])
+limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri="memory://")
 
 class WuiUtente(UserMixin):
     def __init__(self, id, username):
@@ -229,6 +229,11 @@ def utenti_promuovi(id):
 
 @app.route("/utenti/<int:id>/elimina", methods=["POST"])
 def utenti_elimina(id):
+    db("DELETE FROM reclute_moduli WHERE utente_id = %s", (id,))
+    db("DELETE FROM utenti_ruoli WHERE utente_id = %s", (id,))
+    db("DELETE FROM utenti_permessi WHERE utente_id = %s", (id,))
+    db("DELETE FROM presenze WHERE utente_id = %s", (id,))
+    db("DELETE FROM note WHERE utente_id = %s", (id,))
     db("DELETE FROM utenti WHERE id = %s", (id,))
     flash("Utente eliminato.")
     return redirect(url_for("utenti"))
