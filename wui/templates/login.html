@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — Arma3 Admin</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: sans-serif; background: #1a1a2e; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .card { background: #16213e; border-radius: 6px; padding: 32px; width: 100%; max-width: 380px; }
+        h1 { margin-bottom: 24px; font-size: 20px; text-align: center; }
+        .form-group { margin-bottom: 16px; }
+        label { display: block; font-size: 13px; margin-bottom: 4px; color: #a0c4ff; }
+        input { width: 100%; padding: 8px 10px; background: #0f3460; border: 1px solid #1a1a2e; border-radius: 4px; color: #e0e0e0; font-size: 13px; }
+        .btn { width: 100%; padding: 10px; background: #0f3460; color: #fff; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; margin-top: 8px; }
+        .btn:hover { opacity: 0.85; }
+        .flash { background: #b71c1c; padding: 10px 16px; border-radius: 4px; margin-bottom: 16px; font-size: 14px; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>Brigata Lancieri</h1>
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for m in messages %}
+                <div class="flash">{{ m }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    <form method="post">
+        <div class="form-group">
+            <label>Username</label>
+            <input name="username" autofocus>
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input name="password" type="password">
+        </div>
+        <button class="btn" type="submit">Accedi</button>
+    </form>
+</div>
+</body>
+</html>

@@ -5,6 +5,8 @@ import asyncio
 import sys
 import os
 
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+import hashlib
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
@@ -13,6 +15,27 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "cambia_questa_chiave")
 
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+
+class WuiUtente(UserMixin):
+    def __init__(self, id, username):
+        self.id = id
+        self.username = username
+
+@login_manager.user_loader
+def load_user(user_id):
+    row = db("SELECT * FROM wui_utenti WHERE id = %s", (user_id,), fetch="one")
+    if row:
+        return WuiUtente(row["id"], row["username"])
+    return None
+
+@app.before_request
+def controlla_auth():
+    percorsi_pubblici = ["login", "static"]
+    if not current_user.is_authenticated and request.endpoint not in percorsi_pubblici:
+        return redirect(url_for("login"))
 
 # ============================================================
 # DB SINCRONO — solo per la WUI
@@ -72,6 +95,34 @@ def run_calcolo(coro_func, *args):
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+# ============================================================
+# LOGIN - LOGOUT
+# ============================================================
+
+@app.route("/login", methods=["GET","POST"])
+def login():
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
+        row = db("SELECT * FROM wui_utenti WHERE username = %s", (username,), fetch="one")
+        if row:
+            salt, hash_salvato = row["password_hash"].split(":")
+            hash_inserito = hashlib.sha256((salt + password).encode()).hexdigest()
+            if hash_inserito == hash_salvato:
+                login_user(WuiUtente(row["id"], row["username"]))
+                return redirect(url_for("index"))
+
+        flash("Credenziali non valide.")
+    return render_template("login.html")
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for("login"))
 
 
 # ============================================================
