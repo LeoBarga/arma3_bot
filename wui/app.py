@@ -244,6 +244,8 @@ def utenti_promuovi(id):
 
 @app.route("/utenti/<int:id>/elimina", methods=["POST"])
 def utenti_elimina(id):
+    db("DELETE FROM risposte_dettaglio WHERE risposta_id IN (SELECT id FROM risposte WHERE votante_id = %s OR soggetto_id = %s)", (id, id))
+    db("DELETE FROM risposte WHERE votante_id = %s OR soggetto_id = %s", (id, id))
     db("DELETE FROM reclute_moduli WHERE utente_id = %s", (id,))
     db("DELETE FROM utenti_ruoli WHERE utente_id = %s", (id,))
     db("DELETE FROM utenti_permessi WHERE utente_id = %s", (id,))
