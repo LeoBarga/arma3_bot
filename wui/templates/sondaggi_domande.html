@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="top-bar">
+    <h1>Domande — {{ tipo.nome }}</h1>
+    <a href="/sondaggi" class="btn btn-warning">← Torna</a>
+</div>
+
+<div class="card" style="margin-bottom:24px;">
+    {% if domande %}
+    <table style="margin-bottom:16px;">
+        <thead><tr>
+            <th>#</th><th>Testo</th><th>Attiva</th><th>Azioni</th>
+        </tr></thead>
+        <tbody>
+        {% for d in domande %}
+        <tr>
+            <td>{{ d.ordine }}</td>
+            <td>{{ d.testo }}</td>
+            <td>
+                <form method="post" action="/sondaggi/{{ tipo.id }}/domande/{{ d.id }}/toggle">
+                    <button class="btn {{ 'btn-primary' if d.attiva else 'btn-danger' }}" type="submit"
+                            style="font-size:11px; padding:3px 8px;">
+                        {{ "✅ Attiva" if d.attiva else "❌ Disattiva" }}
+                    </button>
+                </form>
+            </td>
+            <td>
+                <form method="post" action="/sondaggi/{{ tipo.id }}/domande/{{ d.id }}/elimina"
+                      onsubmit="return confirm('Eliminare questa domanda?')">
+                    <button class="btn btn-danger">Elimina</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color:#888; margin-bottom:16px;">Nessuna domanda.</p>
+    {% endif %}
+
+    <form method="post" action="/sondaggi/{{ tipo.id }}/domande/nuova"
+          style="display:flex; gap:8px; align-items:flex-start;">
+        <textarea name="testo" rows="2" placeholder="Testo della nuova domanda..."
+                  style="flex:1;"></textarea>
+        <button class="btn btn-primary" type="submit">+ Aggiungi</button>
+    </form>
+</div>
+{% endblock %}

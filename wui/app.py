@@ -184,6 +184,7 @@ def utenti_modifica(id):
     utente = db("SELECT * FROM utenti WHERE id = %s", (id,), fetch="one")
     permessi = db("SELECT permesso FROM utenti_permessi WHERE utente_id = %s", (id,), fetch="all")
     is_istruttore = any(p["permesso"] == "istruttore" for p in permessi)
+    is_admin = any(p["permesso"] == "admin" for p in permessi)
 
     if request.method == "POST":
         telegram_id = request.form.get("telegram_id", "").strip()
@@ -207,12 +208,17 @@ def utenti_modifica(id):
         else:
             db("DELETE FROM utenti_permessi WHERE utente_id = %s AND permesso = 'istruttore'", (id,))
 
+        if request.form.get("is_admin"):
+            db("INSERT IGNORE INTO utenti_permessi (utente_id, permesso) VALUES (%s, 'admin')", (id,))
+        else:
+            db("DELETE FROM utenti_permessi WHERE utente_id = %s AND permesso = 'admin'", (id,))
+
         from calcolo import ricalcola_utente, controlla_promozione_recluta
         run_calcolo(ricalcola_utente, id)
         run_calcolo(controlla_promozione_recluta, id)
         flash("Utente aggiornato.")
         return redirect(url_for("utenti"))
-    return render_template("utenti_form.html", utente=utente, gradi=gradi, is_istruttore=is_istruttore)
+    return render_template("utenti_form.html", utente=utente, gradi=gradi, is_istruttore=is_istruttore, is_admin=is_admin)
 
 @app.route("/utenti/<int:id>/promuovi", methods=["POST"])
 def utenti_promuovi(id):
@@ -605,6 +611,62 @@ def partite_presenze_salva(id):
 
     flash("Presenze salvate.")
     return redirect(url_for("partite_presenze", id=id))
+
+# ============================================================
+# TIPI SONDAGGIO E DOMANDE
+# ============================================================
+
+@app.route("/sondaggi")
+def sondaggi():
+    rows = db("SELECT * FROM tipi_sondaggio ORDER BY nome", fetch="all")
+    return render_template("sondaggi.html", tipi=rows)
+
+@app.route("/sondaggi/nuovo", methods=["GET","POST"])
+def sondaggi_nuovo():
+    if request.method == "POST":
+        db("INSERT INTO tipi_sondaggio (nome, descrizione) VALUES (%s,%s)", (
+            request.form["nome"],
+            request.form.get("descrizione") or None
+        ))
+        flash("Tipo sondaggio creato.")
+        return redirect(url_for("sondaggi"))
+    return render_template("sondaggi_form.html", tipo=None)
+
+@app.route("/sondaggi/<int:id>/elimina", methods=["POST"])
+def sondaggi_elimina(id):
+    db("DELETE FROM domande WHERE tipo_sondaggio_id = %s", (id,))
+    db("DELETE FROM tipi_sondaggio WHERE id = %s", (id,))
+    flash("Tipo sondaggio eliminato.")
+    return redirect(url_for("sondaggi"))
+
+@app.route("/sondaggi/<int:id>/domande")
+def sondaggi_domande(id):
+    tipo   = db("SELECT * FROM tipi_sondaggio WHERE id = %s", (id,), fetch="one")
+    domande = db("SELECT * FROM domande WHERE tipo_sondaggio_id = %s ORDER BY ordine", (id,), fetch="all")
+    return render_template("sondaggi_domande.html", tipo=tipo, domande=domande)
+
+@app.route("/sondaggi/<int:id>/domande/nuova", methods=["POST"])
+def domande_nuova(id):
+    testo = request.form.get("testo", "").strip()
+    if testo:
+        ultima = db("SELECT MAX(ordine) as m FROM domande WHERE tipo_sondaggio_id = %s", (id,), fetch="one")
+        ordine = (ultima["m"] or 0) + 1
+        db("INSERT INTO domande (tipo_sondaggio_id, testo, ordine, attiva) VALUES (%s,%s,%s,TRUE)", (id, testo, ordine))
+        flash("Domanda aggiunta.")
+    return redirect(url_for("sondaggi_domande", id=id))
+
+@app.route("/sondaggi/<int:id>/domande/<int:domanda_id>/elimina", methods=["POST"])
+def domande_elimina(id, domanda_id):
+    db("DELETE FROM domande WHERE id = %s AND tipo_sondaggio_id = %s", (domanda_id, id))
+    flash("Domanda eliminata.")
+    return redirect(url_for("sondaggi_domande", id=id))
+
+@app.route("/sondaggi/<int:id>/domande/<int:domanda_id>/toggle", methods=["POST"])
+def domande_toggle(id, domanda_id):
+    domanda = db("SELECT attiva FROM domande WHERE id = %s", (domanda_id,), fetch="one")
+    nuovo_stato = 0 if domanda["attiva"] else 1
+    db("UPDATE domande SET attiva = %s WHERE id = %s", (nuovo_stato, domanda_id))
+    return redirect(url_for("sondaggi_domande", id=id))
 
 
 # ============================================================

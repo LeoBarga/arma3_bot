@@ -57,6 +57,12 @@
     <div class="form-group">
         <label><input type="checkbox" name="is_istruttore" {{ 'checked' if is_istruttore }}> Istruttore</label>
     </div>
+    <div class="form-group" style="border: 1px solid #ef5350; padding: 12px; border-radius: 4px;">
+        <label style="color:#ef5350;">
+            <input type="checkbox" name="is_admin" {{ 'checked' if is_admin }}>
+            ⚠️ Admin bot Telegram — permette di usare i comandi di amministrazione sul bot (apertura/chiusura sondaggi, gestione utenti ecc.)
+        </label>
+    </div>
     {% endif %}
     <div class="form-actions">
         <button class="btn btn-primary" type="submit">Salva</button>

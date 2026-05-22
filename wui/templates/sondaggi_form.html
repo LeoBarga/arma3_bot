@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Nuovo Tipo Sondaggio</h1>
+<div class="card" style="margin-top:20px; max-width:500px;">
+<form method="post">
+    <div class="form-group">
+        <label>Nome *</label>
+        <input name="nome" value="{{ tipo.nome if tipo else '' }}" required>
+    </div>
+    <div class="form-group">
+        <label>Descrizione</label>
+        <textarea name="descrizione" rows="3">{{ tipo.descrizione if tipo else '' }}</textarea>
+    </div>
+    <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Salva</button>
+        <a href="/sondaggi" class="btn btn-warning">Annulla</a>
+    </div>
+</form>
+</div>
+{% endblock %}

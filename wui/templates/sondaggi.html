@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="top-bar">
+    <h1>Tipi Sondaggio</h1>
+    <a href="/sondaggi/nuovo" class="btn btn-primary">+ Nuovo</a>
+</div>
+<table>
+    <thead><tr>
+        <th>Nome</th><th>Descrizione</th><th>Azioni</th>
+    </tr></thead>
+    <tbody>
+    {% for t in tipi %}
+    <tr>
+        <td>{{ t.nome }}</td>
+        <td>{{ t.descrizione or "—" }}</td>
+        <td class="actions">
+            <a href="/sondaggi/{{ t.id }}/domande" class="btn btn-primary">Domande</a>
+            <form class="inline" method="post" action="/sondaggi/{{ t.id }}/elimina"
+                  onsubmit="return confirm('Eliminare questo tipo e tutte le sue domande?')">
+                <button class="btn btn-danger">Elimina</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
