@@ -125,17 +125,55 @@ async def cmd_stato(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     async with get_pool().acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
+
+            # Grado
             await cur.execute(
                 "SELECT nome FROM gradi WHERE id = %s",
                 (utente["grado_id"],)
             )
             grado = await cur.fetchone()
 
-    testo = (
-        f"👤 {utente['nome']}\n"
-        f"Stato: {utente['stato']}\n"
-        f"Grado: {grado['nome'] if grado else '—'}\n"
-        f"Punteggio: {utente['punteggio']}\n"
-    )
+            if utente["stato"] == "recluta":
+                # Conta moduli completati
+                await cur.execute("""
+                    SELECT
+                        COUNT(*) as totale,
+                        SUM(CASE WHEN stato = 'completato' THEN 1 ELSE 0 END) as completati
+                    FROM reclute_moduli
+                    WHERE utente_id = %s
+                """, (utente["id"],))
+                moduli = await cur.fetchone()
+
+                # Conta presenze
+                await cur.execute("""
+                    SELECT COUNT(*) as n FROM presenze
+                    WHERE utente_id = %s AND presente = TRUE
+                """, (utente["id"],))
+                presenze = (await cur.fetchone())["n"]
+
+                testo = (
+                    f"👤 {utente['nome']}\n"
+                    f"Stato: Recluta\n\n"
+                    f"Moduli completati: {int(moduli['completati'] or 0)}/{moduli['totale']}\n"
+                    f"Partite completate: {presenze}/8\n"
+                )
+
+                if utente["pronta_promozione"]:
+                    testo += "\n✅ Hai completato tutti i requisiti! Contatta un istruttore."
+
+            else:
+                tag = ""
+                if utente["tag"] == "promuovibile":
+                    tag = "\n▲ Sei candidabile per una promozione."
+                elif utente["tag"] == "degradabile":
+                    tag = "\n▼ Sei candidabile per una retrocessione."
+
+                testo = (
+                    f"👤 {utente['nome']}\n"
+                    f"Stato: Effettivo\n"
+                    f"Grado: {grado['nome'] if grado else '—'}\n"
+                    f"Punteggio: {utente['punteggio']}\n"
+                    f"{tag}"
+                )
 
     await update.message.reply_text(testo)
