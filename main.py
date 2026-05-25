@@ -7,7 +7,8 @@ from telegram.ext import (
     MessageHandler,
     CallbackQueryHandler,
     ConversationHandler,
-    filters
+    filters,
+    ContextTypes
 )
 
 from config import BOT_TOKEN
@@ -52,14 +53,16 @@ def main():
         .build()
     )
 
-    # --- Handler base ---
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("stato", cmd_stato))
-    app.add_handler(CommandHandler("sondaggi", cmd_sondaggi))
+    # --- Handler base (solo privato) ---
+    app.add_handler(CommandHandler("start", cmd_start, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("stato", cmd_stato, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("valuta", cmd_valuta, filters=filters.ChatType.PRIVATE))
+
+
 
     # --- Apertura sondaggio (conversazione admin) ---
     conv_apri = ConversationHandler(
-        entry_points=[CommandHandler("apri_sondaggio", cmd_apri_sondaggio)],
+        entry_points=[CommandHandler("apri_sondaggio", cmd_apri_sondaggio, filters=filters.ChatType.GROUPS)],
         states={
             NOME:          [MessageHandler(filters.TEXT & ~filters.COMMAND, ricevi_nome)],
             PARTITA:       [CallbackQueryHandler(ricevi_partita, pattern="^partita_")],
@@ -78,12 +81,12 @@ def main():
     app.add_handler(conv_apri)
 
     # --- Chiusura sondaggio ---
-    app.add_handler(CommandHandler("chiudi_sondaggio", cmd_chiudi_sondaggio))
+    app.add_handler(CommandHandler("chiudi_sondaggio", cmd_chiudi_sondaggio, filters=filters.ChatType.GROUPS))
     app.add_handler(CallbackQueryHandler(callback_chiudi, pattern="^chiudi_"))
 
     # --- Compilazione sondaggio ---
     conv_valuta = ConversationHandler(
-        entry_points=[CommandHandler("valuta", cmd_valuta)],
+        entry_points=[CommandHandler("valuta", cmd_valuta, filters=filters.ChatType.PRIVATE)],
         states={
             SCEGLI_SL: [
                 CallbackQueryHandler(scegli_sondaggio, pattern="^sondaggio_"),
@@ -97,6 +100,16 @@ def main():
     )
     app.add_handler(conv_valuta)
 
+    # --- Avviso comandi privati usati nel gruppo ---
+    async def avviso_privato(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text("🔒 Funzione privata — per usare questo comando scrivilo al bot in una chat privata.")
+
+    app.add_handler(CommandHandler(
+        ["start", "stato", "valuta"],
+        avviso_privato,
+        filters=filters.ChatType.GROUPS
+    ))
+
     # --- Registrazione automatica da gruppo ---
     app.add_handler(MessageHandler(
         filters.TEXT & filters.ChatType.GROUPS,
@@ -108,3 +121,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
