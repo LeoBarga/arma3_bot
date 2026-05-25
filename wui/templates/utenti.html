@@ -5,9 +5,18 @@
     <a href="/utenti/nuovo" class="btn btn-primary">+ Nuovo</a>
 </div>
 <table>
+    <table style="margin-top:16px;">
     <thead><tr>
         <th>Nome</th><th>Username</th><th>Stato</th><th>Grado</th><th>Punteggio</th><th>Tag</th><th>Azioni</th>
     </tr></thead>
+    <form method="get" style="margin-bottom:24px; display:flex; gap:8px;">
+        <input name="cerca" value="{{ cerca }}" placeholder="Cerca per nome o username..."
+            style="flex:1; padding:8px 10px; background:#0f3460; border:1px solid #1a1a2e; border-radius:4px; color:#e0e0e0;">
+        <button class="btn btn-primary" type="submit">Cerca</button>
+        {% if cerca %}
+        <a href="/utenti" class="btn btn-warning">✕ Reset</a>
+        {% endif %}
+    </form>
     <tbody>
     {% for u in utenti %}
     <tr>

@@ -135,11 +135,22 @@ def logout():
 
 @app.route("/utenti")
 def utenti():
-    rows = db(
-        "SELECT u.*, g.nome as grado_nome FROM utenti u LEFT JOIN gradi g ON u.grado_id = g.id ORDER BY u.nome",
-        fetch="all"
-    )
-    return render_template("utenti.html", utenti=rows)
+    cerca = request.args.get("cerca", "").strip()
+    if cerca:
+        rows = db(
+            """SELECT u.*, g.nome as grado_nome 
+               FROM utenti u LEFT JOIN gradi g ON u.grado_id = g.id 
+               WHERE u.nome LIKE %s OR u.username LIKE %s
+               ORDER BY u.nome""",
+            (f"%{cerca}%", f"%{cerca}%"),
+            fetch="all"
+        )
+    else:
+        rows = db(
+            "SELECT u.*, g.nome as grado_nome FROM utenti u LEFT JOIN gradi g ON u.grado_id = g.id ORDER BY u.nome",
+            fetch="all"
+        )
+    return render_template("utenti.html", utenti=rows, cerca=cerca)
 
 @app.route("/utenti/nuovo", methods=["GET","POST"])
 def utenti_nuovo():
@@ -521,13 +532,23 @@ def anni_elimina(id):
 
 @app.route("/partite")
 def partite():
-    rows = db("""
-        SELECT p.*, a.nome as anno_nome
-        FROM partite p
-        JOIN anni_gioco a ON p.anno_gioco_id = a.id
-        ORDER BY p.data_ora DESC
-    """, fetch="all")
-    return render_template("partite.html", partite=rows)
+    cerca = request.args.get("cerca", "").strip()
+    if cerca:
+        rows = db("""
+            SELECT p.*, a.nome as anno_nome
+            FROM partite p
+            JOIN anni_gioco a ON p.anno_gioco_id = a.id
+            WHERE p.nome LIKE %s
+            ORDER BY p.data_ora DESC
+        """, (f"%{cerca}%",), fetch="all")
+    else:
+        rows = db("""
+            SELECT p.*, a.nome as anno_nome
+            FROM partite p
+            JOIN anni_gioco a ON p.anno_gioco_id = a.id
+            ORDER BY p.data_ora DESC
+        """, fetch="all")
+    return render_template("partite.html", partite=rows, cerca=cerca)
 
 @app.route("/partite/nuova", methods=["GET","POST"])
 def partite_nuova():

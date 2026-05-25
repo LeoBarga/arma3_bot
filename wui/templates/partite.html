@@ -5,9 +5,18 @@
     <a href="/partite/nuova" class="btn btn-primary">+ Nuova</a>
 </div>
 <table>
+    <table style="margin-top:16px;">
     <thead><tr>
         <th>Nome</th><th>Data</th><th>Anno</th><th>Addestramento</th><th>Azioni</th>
     </tr></thead>
+    <form method="get" style="margin-bottom:24px; display:flex; gap:8px;">
+        <input name="cerca" value="{{ cerca }}" placeholder="Cerca per nome partita..."
+            style="flex:1; padding:8px 10px; background:#0f3460; border:1px solid #1a1a2e; border-radius:4px; color:#e0e0e0;">
+        <button class="btn btn-primary" type="submit">Cerca</button>
+        {% if cerca %}
+        <a href="/partite" class="btn btn-warning">✕ Reset</a>
+        {% endif %}
+    </form>
     <tbody>
     {% for p in partite %}
     <tr>
