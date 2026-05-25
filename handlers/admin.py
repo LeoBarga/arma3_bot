@@ -69,6 +69,9 @@ async def crea_o_aggiorna_utente(telegram_id: int, nome: str, username: str = No
                 await conn.commit()
                 return utente_id, True  # True = è nuovo
 
+def nome_display(utente: dict) -> str:
+    return utente.get("username") or utente.get("nome") or "Sconosciuto"
+
 
 # ============================================================
 # /start
@@ -80,17 +83,17 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username    = update.effective_user.username
 
     utente_id, is_nuovo = await crea_o_aggiorna_utente(telegram_id, nome, username)
+    utente = await get_utente(telegram_id)
 
     if is_nuovo:
         await update.message.reply_text(
-            f"Benvenuto {nome}!\n\n"
+            f"Benvenuto {nome_display(utente)}!\n\n"
             f"Sei stato registrato come recluta.\n"
             f"Segui le istruzioni degli istruttori per completare i moduli e le partite richieste."
         )
     else:
-        utente = await get_utente(telegram_id)
         await update.message.reply_text(
-            f"Bentornato {nome}!\n"
+            f"Bentornato {nome_display(utente)}!\n"
             f"Stato: {utente['stato']}\n"
         )
 
@@ -152,7 +155,7 @@ async def cmd_stato(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 presenze = (await cur.fetchone())["n"]
 
                 testo = (
-                    f"👤 {utente['nome']}\n"
+                    f"👤 {nome_display(utente)}\n"
                     f"Stato: Recluta\n\n"
                     f"Moduli completati: {int(moduli['completati'] or 0)}/{moduli['totale']}\n"
                     f"Partite completate: {presenze}/8\n"
@@ -162,18 +165,10 @@ async def cmd_stato(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     testo += "\n✅ Hai completato tutti i requisiti! Contatta un istruttore."
 
             else:
-                tag = ""
-                if utente["tag"] == "promuovibile":
-                    tag = "\n▲ Sei candidabile per una promozione."
-                elif utente["tag"] == "degradabile":
-                    tag = "\n▼ Sei candidabile per una retrocessione."
-
                 testo = (
-                    f"👤 {utente['nome']}\n"
+                    f"👤 {nome_display(utente)}\n"
                     f"Stato: Effettivo\n"
                     f"Grado: {grado['nome'] if grado else '—'}\n"
-                    f"Punteggio: {utente['punteggio']}\n"
-                    f"{tag}"
                 )
 
     await update.message.reply_text(testo)

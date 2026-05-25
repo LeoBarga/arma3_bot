@@ -12,6 +12,7 @@ from db import (
     get_conteggio_risposte
 )
 import aiomysql
+from handlers.admin import nome_display
 
 logger = logging.getLogger(__name__)
 
@@ -475,7 +476,7 @@ async def mostra_sl(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     tastiera = InlineKeyboardMarkup([
-        [InlineKeyboardButton(sl["nome"], callback_data=f"sl_{sl['id']}")]
+        [InlineKeyboardButton(sl["username"] or sl["nome"], callback_data=f"sl_{sl['id']}")]
         for sl in sl_disponibili
     ])
     msg = f"📋 {sondaggio['nome']}\n\nQuale SL vuoi valutare?"
@@ -488,6 +489,7 @@ async def mostra_sl(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def scegli_sl(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    logger.info(f"scegli_sl chiamata con data: {query.data}")
 
     sl_id     = int(query.data.split("_")[1])
     sondaggio = context.user_data["sondaggio"]
@@ -542,7 +544,7 @@ async def annulla(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if risposta_id:
         await elimina_risposta(risposta_id)
     context.user_data.clear()
-    await update.message.reply_text("❌ Valutazione annullata.")
+    await update.message.reply_text("❌ Operazione annullata.")
     return ConversationHandler.END
 
 async def manda_domanda(message, context):

@@ -53,14 +53,23 @@ def main():
         .build()
     )
 
-    # --- Handler base (solo privato) ---
-    app.add_handler(CommandHandler("start", cmd_start, filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("stato", cmd_stato, filters=filters.ChatType.PRIVATE))
-    app.add_handler(CommandHandler("valuta", cmd_valuta, filters=filters.ChatType.PRIVATE))
+    # --- Compilazione sondaggio (PRIMA di tutto) ---
+    conv_valuta = ConversationHandler(
+        entry_points=[CommandHandler("valuta", cmd_valuta, filters=filters.ChatType.PRIVATE)],
+        states={
+            SCEGLI_SL: [
+                CallbackQueryHandler(scegli_sondaggio, pattern="^sondaggio_"),
+                CallbackQueryHandler(scegli_sl, pattern="^sl_"),
+            ],
+            RISPONDI: [CallbackQueryHandler(rispondi_domanda, pattern="^[0-9]+$")],
+        },
+        fallbacks=[CommandHandler("annulla", annulla)],
+        per_user=True,
+        per_chat=False
+    )
+    app.add_handler(conv_valuta)
 
-
-
-    # --- Apertura sondaggio (conversazione admin) ---
+    # --- Apertura sondaggio ---
     conv_apri = ConversationHandler(
         entry_points=[CommandHandler("apri_sondaggio", cmd_apri_sondaggio, filters=filters.ChatType.GROUPS)],
         states={
@@ -76,34 +85,22 @@ def main():
         },
         fallbacks=[CommandHandler("annulla", annulla)],
         per_user=True,
-        per_chat=True
+        per_chat=False
     )
     app.add_handler(conv_apri)
 
-    # --- Chiusura sondaggio ---
+    # --- Handler admin ---
+    app.add_handler(CommandHandler("start", cmd_start, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("stato", cmd_stato, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("sondaggi", cmd_sondaggi, filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("chiudi_sondaggio", cmd_chiudi_sondaggio, filters=filters.ChatType.GROUPS))
     app.add_handler(CallbackQueryHandler(callback_chiudi, pattern="^chiudi_"))
 
-    # --- Compilazione sondaggio ---
-    conv_valuta = ConversationHandler(
-        entry_points=[CommandHandler("valuta", cmd_valuta, filters=filters.ChatType.PRIVATE)],
-        states={
-            SCEGLI_SL: [
-                CallbackQueryHandler(scegli_sondaggio, pattern="^sondaggio_"),
-                CallbackQueryHandler(scegli_sl, pattern="^sl_"),
-            ],
-            RISPONDI: [CallbackQueryHandler(rispondi_domanda, pattern="^[0-9]+$")],
-        },
-        fallbacks=[CommandHandler("annulla", annulla)],
-        per_user=True,
-        per_chat=True
-    )
-    app.add_handler(conv_valuta)
-
-    # --- Avviso comandi privati usati nel gruppo ---
+    # --- Avviso comandi privati nel gruppo ---
     async def avviso_privato(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("🔒 Funzione privata — per usare questo comando scrivilo al bot in una chat privata.")
-
+        await update.message.reply_text(
+            "🔒 Funzione privata — per usare questo comando scrivilo al bot in una chat privata."
+        )
     app.add_handler(CommandHandler(
         ["start", "stato", "valuta"],
         avviso_privato,
