@@ -23,6 +23,9 @@
     <div class="form-group">
         <label><input type="checkbox" name="is_sl" {{ 'checked' if ruolo and ruolo.is_sl }}> Ruolo SL (bonus +30pt)</label>
     </div>
+    <div class="form-group">
+        <label><input type="checkbox" name="is_pl" {{ 'checked' if ruolo and ruolo.is_pl }}> Ruolo PL (Comandante di Plotone)</label>
+    </div>
     {% if ruolo %}
     <div class="form-group">
         <label><input type="checkbox" name="attivo" {{ 'checked' if ruolo and ruolo.attivo }}> Attivo</label>

@@ -448,7 +448,8 @@ def ruoli_nuovo():
             request.form["nome"],
             request.form.get("descrizione") or None,
             request.form.get("grado_minimo_id") or None,
-            1 if request.form.get("is_sl") else 0
+            1 if request.form.get("is_sl") else 0,
+            1 if request.form.get("is_pl") else 0
         ))
         flash("Ruolo creato.")
         return redirect(url_for("ruoli"))
@@ -464,6 +465,7 @@ def ruoli_modifica(id):
             request.form.get("descrizione") or None,
             request.form.get("grado_minimo_id") or None,
             1 if request.form.get("is_sl") else 0,
+            1 if request.form.get("is_pl") else 0,
             1 if request.form.get("attivo") else 0,
             id
         ))

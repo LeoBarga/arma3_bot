@@ -6,13 +6,13 @@ from telegram.ext import ContextTypes, ConversationHandler
 from db import (
     get_pool, get_sondaggi_attivi, get_sondaggio_by_id,
     crea_sondaggio, chiudi_sondaggio, get_partecipanti_sondaggio,
-    get_sl_partita, get_domande_sondaggio, ha_gia_risposto,
-    crea_risposta, salva_dettaglio, completa_risposta,
+    get_soggetti_partita, get_votanti_pl, get_domande_sondaggio,
+    ha_gia_risposto, crea_risposta, salva_dettaglio, completa_risposta,
     elimina_risposta, get_medie_sondaggio, get_ultime_partite,
     get_conteggio_risposte
 )
-import aiomysql
 from handlers.admin import nome_display
+import aiomysql
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,6 @@ ORE_DISPONIBILI = ["08:00","10:00","12:00","14:00","16:00","18:00","20:00","22:0
 # ============================================================
 # HELPER
 # ============================================================
-
-def is_admin(utente: dict) -> bool:
-    return utente and utente.get("is_admin", False)
 
 async def get_utente_completo(telegram_id: int):
     async with get_pool().acquire() as conn:
@@ -52,6 +49,30 @@ async def get_utente_completo(telegram_id: int):
             utente["is_admin"] = any(p["permesso"] == "admin" for p in permessi)
             return utente
 
+async def get_tipo_sondaggio(tipo_id: int):
+    async with get_pool().acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                "SELECT * FROM tipi_sondaggio WHERE id = %s",
+                (tipo_id,)
+            )
+            return await cur.fetchone()
+
+async def get_tipi_sondaggio_attivi():
+    async with get_pool().acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                "SELECT * FROM tipi_sondaggio WHERE attivo = TRUE ORDER BY nome"
+            )
+            return await cur.fetchall()
+
+def label_target(target: str) -> str:
+    if target == "sl":
+        return "SL"
+    if target == "pl":
+        return "PL"
+    return "comandanti"
+
 
 # ============================================================
 # /apri_sondaggio — solo admin
@@ -69,11 +90,39 @@ async def cmd_apri_sondaggio(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def ricevi_nome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["nome_sondaggio"] = update.message.text.strip()
 
+    tipi = await get_tipi_sondaggio_attivi()
+    if not tipi:
+        await update.message.reply_text("⚠️ Nessun tipo sondaggio disponibile. Creane uno dalla WUI.")
+        return ConversationHandler.END
+
+    if len(tipi) == 1:
+        context.user_data["tipo"] = tipi[0]
+        return await chiedi_partita(update, context)
+
+    tastiera = InlineKeyboardMarkup([
+        [InlineKeyboardButton(t["nome"], callback_data=f"tipo_{t['id']}")]
+        for t in tipi
+    ])
+    await update.message.reply_text("Che tipo di sondaggio vuoi aprire?", reply_markup=tastiera)
+    return PARTITA
+
+async def ricevi_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    tipo_id = int(query.data.split("_")[1])
+    tipo    = await get_tipo_sondaggio(tipo_id)
+    context.user_data["tipo"] = tipo
+    return await chiedi_partita(update, context)
+
+async def chiedi_partita(update, context):
     partite = await get_ultime_partite(10)
     if not partite:
-        await update.message.reply_text(
-            "⚠️ Nessuna partita disponibile. Creane una prima dalla WUI."
-        )
+        msg = "⚠️ Nessuna partita disponibile. Creane una dalla WUI."
+        if update.callback_query:
+            await update.callback_query.edit_message_text(msg)
+        else:
+            await update.message.reply_text(msg)
         return ConversationHandler.END
 
     tastiera = InlineKeyboardMarkup([
@@ -83,12 +132,18 @@ async def ricevi_nome(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )]
         for p in partite
     ])
-    await update.message.reply_text("A quale partita si riferisce?", reply_markup=tastiera)
+    if update.callback_query:
+        await update.callback_query.edit_message_text("A quale partita si riferisce?", reply_markup=tastiera)
+    else:
+        await update.message.reply_text("A quale partita si riferisce?", reply_markup=tastiera)
     return PARTITA
 
 async def ricevi_partita(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    if query.data.startswith("tipo_"):
+        return await ricevi_tipo(update, context)
 
     partita_id = int(query.data.split("_")[1])
     context.user_data["partita_id"] = partita_id
@@ -106,11 +161,10 @@ async def ricevi_quando_apre(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if query.data == "apre_adesso":
         context.user_data["schedulata_il"] = None
-        await query.edit_message_text("Quando si chiude?\n\nScrivi la data (GG/MM/YYYY), oppure scegli:")
         tastiera = InlineKeyboardMarkup([[
             InlineKeyboardButton("Manualmente", callback_data="chiude_manuale"),
-            InlineKeyboardButton("Tra N ore", callback_data="chiude_ore"),
-            InlineKeyboardButton("Data e ora", callback_data="chiude_data")
+            InlineKeyboardButton("Tra N ore",   callback_data="chiude_ore"),
+            InlineKeyboardButton("Data e ora",  callback_data="chiude_data")
         ]])
         await query.edit_message_text("Quando si chiude?", reply_markup=tastiera)
         return QUANDO_CHIUDE
@@ -140,8 +194,7 @@ async def ricevi_ora_apertura(update: Update, context: ContextTypes.DEFAULT_TYPE
     ora_str = query.data.replace("ora_apertura_", "")
     data    = context.user_data["data_apertura"]
     ora     = datetime.strptime(ora_str, "%H:%M")
-    schedulata_il = data.replace(hour=ora.hour, minute=ora.minute)
-    context.user_data["schedulata_il"] = schedulata_il
+    context.user_data["schedulata_il"] = data.replace(hour=ora.hour, minute=ora.minute)
 
     tastiera = InlineKeyboardMarkup([[
         InlineKeyboardButton("Manualmente", callback_data="chiude_manuale"),
@@ -155,25 +208,20 @@ async def ricevi_quando_chiude(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
 
-    if query.data == "chiude_manuale":
-        context.user_data["chiusura_tipo"] = "manuale"
-        await query.edit_message_text("Scrivi quante ore dopo l'apertura deve chiudersi, oppure 0 per chiusura manuale.\n\nConfermi chiusura manuale?")
-        return await conferma_crea_sondaggio(update, context)
+    context.user_data["chiusura_tipo"] = query.data.replace("chiude_", "")
 
+    if query.data == "chiude_manuale":
+        return await conferma_crea_sondaggio(update, context)
     elif query.data == "chiude_ore":
-        context.user_data["chiusura_tipo"] = "ore"
         await query.edit_message_text("Quante ore dopo l'apertura deve chiudersi?")
         return ORE_CHIUSURA
-
     else:
-        context.user_data["chiusura_tipo"] = "data"
         await query.edit_message_text("Che giorno si chiude? (formato GG/MM/YYYY)")
         return DATA_CHIUSURA
 
 async def ricevi_ore_chiusura(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        ore = int(update.message.text.strip())
-        context.user_data["ore_chiusura"] = ore
+        context.user_data["ore_chiusura"] = int(update.message.text.strip())
     except ValueError:
         await update.message.reply_text("Inserisci un numero intero.")
         return ORE_CHIUSURA
@@ -181,8 +229,7 @@ async def ricevi_ore_chiusura(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def ricevi_data_chiusura(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        data = datetime.strptime(update.message.text.strip(), "%d/%m/%Y")
-        context.user_data["data_chiusura"] = data
+        context.user_data["data_chiusura"] = datetime.strptime(update.message.text.strip(), "%d/%m/%Y")
     except ValueError:
         await update.message.reply_text("Formato non valido. Usa GG/MM/YYYY")
         return DATA_CHIUSURA
@@ -207,7 +254,6 @@ async def ricevi_ora_chiusura(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def conferma_crea_sondaggio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     d = context.user_data
 
-    # Calcola chiusa_il
     schedulata_il = d.get("schedulata_il")
     chiusura_tipo = d.get("chiusura_tipo")
 
@@ -219,14 +265,13 @@ async def conferma_crea_sondaggio(update: Update, context: ContextTypes.DEFAULT_
     else:
         chiusa_il = d.get("chiusa_il")
 
-    # Recupera utente
-    telegram_id = update.effective_user.id if update.effective_user else update.callback_query.from_user.id
+    telegram_id = (update.effective_user or update.callback_query.from_user).id
     async with get_pool().acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute("SELECT id FROM utenti WHERE telegram_id = %s", (telegram_id,))
             utente = await cur.fetchone()
-            await cur.execute("SELECT id FROM tipi_sondaggio WHERE nome = 'Valutazione SL' LIMIT 1")
-            tipo = await cur.fetchone()
+
+    tipo = d["tipo"]
 
     sondaggio_id = await crea_sondaggio(
         tipo_id=tipo["id"],
@@ -237,29 +282,26 @@ async def conferma_crea_sondaggio(update: Update, context: ContextTypes.DEFAULT_
         creato_da=utente["id"]
     )
 
-    # Se apre adesso, invia subito il sondaggio
     if schedulata_il is None:
-    	sondaggio = await get_sondaggio_by_id(sondaggio_id)
-    	await invia_sondaggio(
-            update.effective_message or update.callback_query.message,
-            context,
-            sondaggio_id,
-            sondaggio
-        )
+        sondaggio = await get_sondaggio_by_id(sondaggio_id)
+        msg = update.effective_message or update.callback_query.message
+        await invia_sondaggio(msg, context, sondaggio_id, sondaggio)
 
-    apertura_str  = "Adesso" if not schedulata_il else schedulata_il.strftime("%d/%m/%Y alle %H:%M")
-    chiusura_str  = "Manuale" if not chiusa_il else chiusa_il.strftime("%d/%m/%Y alle %H:%M")
+    apertura_str = "Adesso" if not schedulata_il else schedulata_il.strftime("%d/%m/%Y alle %H:%M")
+    chiusura_str = "Manuale" if not chiusa_il else chiusa_il.strftime("%d/%m/%Y alle %H:%M")
+    label        = label_target(tipo.get("target", "tutti"))
 
-    msg = (
+    msg_testo = (
         f"✅ Sondaggio '{d['nome_sondaggio']}' creato.\n"
+        f"Tipo: Valutazione {label}\n"
         f"Apertura: {apertura_str}\n"
         f"Chiusura: {chiusura_str}"
     )
 
-    if hasattr(update, "callback_query") and update.callback_query:
-        await update.callback_query.edit_message_text(msg)
+    if update.callback_query:
+        await update.callback_query.edit_message_text(msg_testo)
     else:
-        await update.message.reply_text(msg)
+        await update.message.reply_text(msg_testo)
 
     context.user_data.clear()
     return ConversationHandler.END
@@ -271,16 +313,25 @@ async def conferma_crea_sondaggio(update: Update, context: ContextTypes.DEFAULT_
 
 async def invia_sondaggio(message, context, sondaggio_id: int, sondaggio: dict = None):
     if sondaggio is None:
-    	sondaggio = await get_sondaggio_by_id(sondaggio_id)
-    sl_list = await get_sl_partita(sondaggio["partita_id"])
+        sondaggio = await get_sondaggio_by_id(sondaggio_id)
 
-    if not sl_list:
-        await message.reply_text("⚠️ Nessun SL presente alla partita.")
+    tipo   = await get_tipo_sondaggio(sondaggio["tipo_sondaggio_id"])
+    target = tipo.get("target", "sl")
+    label  = label_target(target)
+
+    soggetti = await get_soggetti_partita(sondaggio["partita_id"], target)
+
+    if not soggetti:
+        await message.reply_text(f"⚠️ Nessun {label} presente alla partita.")
         return
 
     inviati = 0
-    for sl in sl_list:
-        partecipanti = await get_partecipanti_sondaggio(sondaggio["partita_id"], sl["id"])
+    for soggetto in soggetti:
+        if target == "pl":
+            partecipanti = await get_votanti_pl(sondaggio["partita_id"], soggetto["id"])
+        else:
+            partecipanti = await get_partecipanti_sondaggio(sondaggio["partita_id"], soggetto["id"])
+
         for p in partecipanti:
             try:
                 await context.bot.send_message(
@@ -314,7 +365,7 @@ async def cmd_sondaggi(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     testo = "📊 Sondaggi attivi:\n\n"
     for s in attivi:
-        n = await get_conteggio_risposte(s["id"])
+        n        = await get_conteggio_risposte(s["id"])
         apertura = s["aperta_il"].strftime("%d/%m/%Y %H:%M") if s["aperta_il"] else "schedulato"
         chiusura = s["chiusa_il"].strftime("%d/%m/%Y %H:%M") if s["chiusa_il"] else "manuale"
         testo += (
@@ -368,12 +419,12 @@ async def callback_chiudi(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await chiudi_sondaggio(sondaggio_id)
     await invia_risultati(context, sondaggio_id, sondaggio["nome"])
     await query.edit_message_text(
-        f"🔒 Sondaggio '{sondaggio['nome']}' chiuso. Risultati inviati agli SL."
+        f"🔒 Sondaggio '{sondaggio['nome']}' chiuso. Risultati inviati."
     )
 
 
 # ============================================================
-# INVIO RISULTATI AGLI SL
+# INVIO RISULTATI
 # ============================================================
 
 async def invia_risultati(context, sondaggio_id: int, nome_sondaggio: str):
@@ -382,23 +433,27 @@ async def invia_risultati(context, sondaggio_id: int, nome_sondaggio: str):
         logger.info("Nessun risultato da inviare.")
         return
 
-    per_sl = {}
+    sondaggio = await get_sondaggio_by_id(sondaggio_id)
+    tipo      = await get_tipo_sondaggio(sondaggio["tipo_sondaggio_id"])
+    label     = label_target(tipo.get("target", "sl"))
+
+    per_soggetto = {}
     for riga in medie:
         nome = riga["sl_nome"]
-        if nome not in per_sl:
-            per_sl[nome] = {
+        if nome not in per_soggetto:
+            per_soggetto[nome] = {
                 "telegram_id": riga["sl_telegram_id"],
                 "votanti":     riga["votanti"],
                 "domande":     []
             }
-        per_sl[nome]["domande"].append({
+        per_soggetto[nome]["domande"].append({
             "testo": riga["domanda"],
             "media": riga["media"]
         })
 
-    for sl_nome, dati in per_sl.items():
+    for soggetto_nome, dati in per_soggetto.items():
         testo = (
-            f"📊 SL {sl_nome}\n"
+            f"📊 {label} {soggetto_nome}\n"
             f"Risultati: {nome_sondaggio}\n"
             f"Votanti: {dati['votanti']}\n\n"
         )
@@ -408,7 +463,7 @@ async def invia_risultati(context, sondaggio_id: int, nome_sondaggio: str):
         try:
             await context.bot.send_message(chat_id=dati["telegram_id"], text=testo)
         except Exception as e:
-            logger.warning(f"Impossibile inviare risultati a {sl_nome}: {e}")
+            logger.warning(f"Impossibile inviare risultati a {soggetto_nome}: {e}")
 
 
 # ============================================================
@@ -431,15 +486,39 @@ async def cmd_valuta(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📭 Nessun sondaggio attivo al momento.")
         return ConversationHandler.END
 
+    # Filtra solo i sondaggi in cui l'utente può votare
+    sondaggi_disponibili = []
+    for s in attivi:
+        tipo   = await get_tipo_sondaggio(s["tipo_sondaggio_id"])
+        target = tipo.get("target", "sl")
+
+        if target == "pl":
+            # Solo gli SL possono votare i PL
+            votanti = await get_votanti_pl(s["partita_id"], 0)
+            ids     = [v["id"] for v in votanti]
+            if utente["id"] not in ids:
+                continue
+        else:
+            partecipanti = await get_partecipanti_sondaggio(s["partita_id"], 0)
+            ids          = [p["id"] for p in partecipanti]
+            if utente["id"] not in ids:
+                continue
+
+        sondaggi_disponibili.append(s)
+
+    if not sondaggi_disponibili:
+        await update.message.reply_text("📭 Non ci sono sondaggi disponibili per te al momento.")
+        return ConversationHandler.END
+
     context.user_data["utente"] = utente
 
-    if len(attivi) == 1:
-        context.user_data["sondaggio"] = attivi[0]
-        return await mostra_sl(update, context)
+    if len(sondaggi_disponibili) == 1:
+        context.user_data["sondaggio"] = sondaggi_disponibili[0]
+        return await mostra_soggetti(update, context)
 
     tastiera = InlineKeyboardMarkup([
         [InlineKeyboardButton(s["nome"], callback_data=f"sondaggio_{s['id']}")]
-        for s in attivi
+        for s in sondaggi_disponibili
     ])
     await update.message.reply_text("Quale sondaggio vuoi compilare?", reply_markup=tastiera)
     return SCEGLI_SL
@@ -451,25 +530,29 @@ async def scegli_sondaggio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sondaggio_id = int(query.data.split("_")[1])
     sondaggio    = await get_sondaggio_by_id(sondaggio_id)
     context.user_data["sondaggio"] = sondaggio
-    return await mostra_sl(update, context)
+    return await mostra_soggetti(update, context)
 
-async def mostra_sl(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def mostra_soggetti(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sondaggio = context.user_data["sondaggio"]
     utente    = context.user_data["utente"]
 
-    sl_list = await get_sl_partita(sondaggio["partita_id"])
+    tipo   = await get_tipo_sondaggio(sondaggio["tipo_sondaggio_id"])
+    target = tipo.get("target", "sl")
+    label  = label_target(target)
 
-    # Filtra SL già votati e se stesso
-    sl_disponibili = []
-    for sl in sl_list:
-        if sl["id"] == utente["id"]:
-            continue
-        if await ha_gia_risposto(sondaggio["id"], utente["id"], sl["id"]):
-            continue
-        sl_disponibili.append(sl)
+    soggetti = await get_soggetti_partita(sondaggio["partita_id"], target)
 
-    if not sl_disponibili:
-        msg = "Hai già valutato tutti gli SL disponibili per questo sondaggio."
+    # Filtra già votati e se stesso
+    soggetti_disponibili = []
+    for s in soggetti:
+        if s["id"] == utente["id"]:
+            continue
+        if await ha_gia_risposto(sondaggio["id"], utente["id"], s["id"]):
+            continue
+        soggetti_disponibili.append(s)
+
+    if not soggetti_disponibili:
+        msg = f"Hai già valutato tutti gli {label} disponibili per questo sondaggio."
         if update.callback_query:
             await update.callback_query.edit_message_text(msg)
         else:
@@ -477,10 +560,13 @@ async def mostra_sl(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     tastiera = InlineKeyboardMarkup([
-        [InlineKeyboardButton(sl["username"] or sl["nome"], callback_data=f"sl_{sl['id']}")]
-        for sl in sl_disponibili
+        [InlineKeyboardButton(
+            s["username"] or s["nome"],
+            callback_data=f"sl_{s['id']}"
+        )]
+        for s in soggetti_disponibili
     ])
-    msg = f"📋 {sondaggio['nome']}\n\nQuale SL vuoi valutare?"
+    msg = f"📋 {sondaggio['nome']}\n\nQuale {label} vuoi valutare?"
     if update.callback_query:
         await update.callback_query.edit_message_text(msg, reply_markup=tastiera)
     else:
@@ -490,21 +576,24 @@ async def mostra_sl(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def scegli_sl(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    logger.info(f"scegli_sl chiamata con data: {query.data}")
 
-    sl_id     = int(query.data.split("_")[1])
-    sondaggio = context.user_data["sondaggio"]
-    utente    = context.user_data["utente"]
+    soggetto_id = int(query.data.split("_")[1])
+    sondaggio   = context.user_data["sondaggio"]
+    utente      = context.user_data["utente"]
 
-    risposta_id = await crea_risposta(sondaggio["id"], utente["id"], sl_id)
+    risposta_id = await crea_risposta(sondaggio["id"], utente["id"], soggetto_id)
     domande     = await get_domande_sondaggio(sondaggio["tipo_sondaggio_id"])
 
-    context.user_data["sl_id"]       = sl_id
-    context.user_data["risposta_id"] = risposta_id
-    context.user_data["domande"]     = domande
-    context.user_data["domanda_idx"] = 0
+    context.user_data["soggetto_id"]  = soggetto_id
+    context.user_data["risposta_id"]  = risposta_id
+    context.user_data["domande"]      = domande
+    context.user_data["domanda_idx"]  = 0
+
+    tipo  = await get_tipo_sondaggio(sondaggio["tipo_sondaggio_id"])
+    label = label_target(tipo.get("target", "sl"))
 
     await query.edit_message_text(
+        f"Stai valutando un {label}.\n"
         f"Risponderai a {len(domande)} domande con un voto da 1 a 10.\n"
         f"Scrivi /annulla per interrompere."
     )
@@ -535,7 +624,7 @@ async def rispondi_domanda(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await completa_risposta(context.user_data["risposta_id"])
         await query.message.reply_text(
             "✅ Valutazione completata. Grazie!\n\n"
-            "Puoi valutare un altro SL con /valuta."
+            "Puoi fare un'altra valutazione con /valuta."
         )
         context.user_data.clear()
         return ConversationHandler.END
@@ -545,7 +634,7 @@ async def annulla(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if risposta_id:
         await elimina_risposta(risposta_id)
     context.user_data.clear()
-    await update.message.reply_text("❌ Operazione annullata.")
+    await update.message.reply_text("❌ Valutazione annullata.")
     return ConversationHandler.END
 
 async def manda_domanda(message, context):

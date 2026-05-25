@@ -15,7 +15,7 @@ from config import BOT_TOKEN
 from db import init_db, close_db
 from handlers.admin import cmd_start, registra_da_gruppo, cmd_stato
 from handlers.sondaggio import (
-    cmd_apri_sondaggio, ricevi_nome, ricevi_partita,
+    cmd_apri_sondaggio, ricevi_tipo, ricevi_nome, ricevi_partita,
     ricevi_quando_apre, ricevi_data_apertura, ricevi_ora_apertura,
     ricevi_quando_chiude, ricevi_ore_chiusura, ricevi_data_chiusura,
     ricevi_ora_chiusura, cmd_sondaggi, cmd_chiudi_sondaggio,
@@ -77,7 +77,7 @@ def main():
         entry_points=[CommandHandler("apri_sondaggio", cmd_apri_sondaggio, filters=filters.ChatType.GROUPS)],
         states={
             NOME:          [MessageHandler(filters.TEXT & ~filters.COMMAND, ricevi_nome)],
-            PARTITA:       [CallbackQueryHandler(ricevi_partita, pattern="^partita_")],
+            PARTITA:       [CallbackQueryHandler(ricevi_tipo, pattern="^tipo_"), CallbackQueryHandler(ricevi_partita, pattern="^partita_")],
             QUANDO_APRE:   [CallbackQueryHandler(ricevi_quando_apre, pattern="^apre_")],
             DATA_APERTURA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ricevi_data_apertura)],
             ORA_APERTURA:  [CallbackQueryHandler(ricevi_ora_apertura, pattern="^ora_apertura_")],

@@ -56,8 +56,7 @@ async def get_sondaggio_by_id(sondaggio_id: int):
             )
             return await cur.fetchone()
 
-async def crea_sondaggio(tipo_id: int, nome: str, partita_id: int,
-                          schedulata_il, chiusa_il, creato_da: int):
+async def crea_sondaggio(tipo_id: int, nome: str, partita_id: int, schedulata_il, chiusa_il, creato_da: int):
     async with get_pool().acquire() as conn:
         async with conn.cursor() as cur:
             aperta_il = None
@@ -104,12 +103,31 @@ async def get_partecipanti_sondaggio(partita_id: int, sl_id: int):
             """, (partita_id, sl_id))
             return await cur.fetchall()
 
-async def get_sl_partita(partita_id: int):
-    """SL presenti alla partita."""
+async def get_soggetti_partita(partita_id: int, tipo: str):
+    """tipo = 'sl' o 'pl'"""
+    flag = "r.is_sl" if tipo == "sl" else "r.is_pl"
+    async with get_pool().acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(f"""
+                SELECT u.id, u.nome, u.username, u.telegram_id
+                FROM presenze p
+                JOIN utenti u ON p.utente_id = u.id
+                JOIN utenti_ruoli ur ON ur.utente_id = u.id
+                JOIN ruoli r ON ur.ruolo_id = r.id
+                WHERE p.partita_id = %s
+                  AND p.presente = TRUE
+                  AND u.stato = 'effettivo'
+                  AND {flag} = TRUE
+                  AND ur.stato = 'ottenuto'
+            """, (partita_id,))
+            return await cur.fetchall()
+
+async def get_votanti_pl(partita_id: int, pl_id: int):
+    """Solo gli SL presenti, escludendo il PL stesso."""
     async with get_pool().acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute("""
-                SELECT u.id, u.nome, u.username, u.telegram_id
+                SELECT u.id, u.telegram_id, u.nome
                 FROM presenze p
                 JOIN utenti u ON p.utente_id = u.id
                 JOIN utenti_ruoli ur ON ur.utente_id = u.id
@@ -119,7 +137,9 @@ async def get_sl_partita(partita_id: int):
                   AND u.stato = 'effettivo'
                   AND r.is_sl = TRUE
                   AND ur.stato = 'ottenuto'
-            """, (partita_id,))
+                  AND u.id != %s
+                  AND u.telegram_id IS NOT NULL
+            """, (partita_id, pl_id))
             return await cur.fetchall()
 
 async def get_domande_sondaggio(tipo_sondaggio_id: int):
