@@ -25,6 +25,7 @@ from handlers.sondaggio import (
     QUANDO_CHIUDE, DATA_CHIUSURA, ORA_CHIUSURA, ORE_CHIUSURA,
     SCEGLI_SL, RISPONDI
 )
+from scheduler import avvia_scheduler, ferma_scheduler
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -38,9 +39,11 @@ logger = logging.getLogger(__name__)
 
 async def on_startup(app):
     await init_db()
+    avvia_scheduler(app.bot)
     logger.info("Connessione DB inizializzata.")
 
 async def on_shutdown(app):
+    ferma_scheduler()
     await close_db()
     logger.info("Connessione DB chiusa.")
 

@@ -109,7 +109,7 @@ async def get_sl_partita(partita_id: int):
     async with get_pool().acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute("""
-                SELECT u.id, u.nome, u.telegram_id
+                SELECT u.id, u.nome, u.username, u.telegram_id
                 FROM presenze p
                 JOIN utenti u ON p.utente_id = u.id
                 JOIN utenti_ruoli ur ON ur.utente_id = u.id

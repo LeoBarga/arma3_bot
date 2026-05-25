@@ -398,7 +398,8 @@ async def invia_risultati(context, sondaggio_id: int, nome_sondaggio: str):
 
     for sl_nome, dati in per_sl.items():
         testo = (
-            f"📊 Risultati: {nome_sondaggio}\n"
+            f"📊 SL {sl_nome}\n"
+            f"Risultati: {nome_sondaggio}\n"
             f"Votanti: {dati['votanti']}\n\n"
         )
         for d in dati["domande"]:
