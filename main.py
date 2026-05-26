@@ -15,11 +15,11 @@ from config import BOT_TOKEN
 from db import init_db, close_db
 from handlers.admin import cmd_start, registra_da_gruppo, cmd_stato
 from handlers.sondaggio import (
-    cmd_apri_sondaggio, ricevi_tipo, ricevi_nome, ricevi_partita,
+    cmd_apri_sondaggio, ricevi_modalita, ricevi_tipo, ricevi_nome, ricevi_partita,
     ricevi_quando_apre, ricevi_data_apertura, ricevi_ora_apertura,
     ricevi_quando_chiude, ricevi_ore_chiusura, ricevi_data_chiusura,
     ricevi_ora_chiusura, cmd_sondaggi, cmd_chiudi_sondaggio,
-    callback_chiudi, cmd_valuta, scegli_sondaggio, scegli_sl,
+    callback_chiudi, cmd_valuta, inizia_valutazione, scegli_sondaggio, scegli_sl,
     rispondi_domanda, annulla,
     NOME, PARTITA, QUANDO_APRE, DATA_APERTURA, ORA_APERTURA,
     QUANDO_CHIUDE, DATA_CHIUSURA, ORA_CHIUSURA, ORE_CHIUSURA,
@@ -58,7 +58,7 @@ def main():
 
     # --- Compilazione sondaggio (PRIMA di tutto) ---
     conv_valuta = ConversationHandler(
-        entry_points=[CommandHandler("valuta", cmd_valuta, filters=filters.ChatType.PRIVATE)],
+        entry_points=[CommandHandler("valuta", cmd_valuta, filters=filters.ChatType.PRIVATE), CallbackQueryHandler(inizia_valutazione, pattern="^inizia_")],
         states={
             SCEGLI_SL: [
                 CallbackQueryHandler(scegli_sondaggio, pattern="^sondaggio_"),
@@ -76,7 +76,7 @@ def main():
     conv_apri = ConversationHandler(
         entry_points=[CommandHandler("apri_sondaggio", cmd_apri_sondaggio, filters=filters.ChatType.GROUPS)],
         states={
-            NOME:          [MessageHandler(filters.TEXT & ~filters.COMMAND, ricevi_nome)],
+            NOME:          [CallbackQueryHandler(ricevi_modalita, pattern="^modalita_"), MessageHandler(filters.TEXT & ~filters.COMMAND, ricevi_nome)],
             PARTITA:       [CallbackQueryHandler(ricevi_tipo, pattern="^tipo_"), CallbackQueryHandler(ricevi_partita, pattern="^partita_")],
             QUANDO_APRE:   [CallbackQueryHandler(ricevi_quando_apre, pattern="^apre_")],
             DATA_APERTURA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ricevi_data_apertura)],
