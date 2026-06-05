@@ -111,7 +111,6 @@ async def registra_da_gruppo(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if is_nuovo:
         logger.info(f"Nuovo utente registrato da gruppo: {nome} ({telegram_id})")
 
-
 # ============================================================
 # /stato — info personali
 # ============================================================
