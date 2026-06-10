@@ -25,7 +25,13 @@ from handlers.sondaggio import (
     QUANDO_CHIUDE, DATA_CHIUSURA, ORA_CHIUSURA, ORE_CHIUSURA,
     SCEGLI_SL, RISPONDI
 )
+from handlers.presenze import (
+    cmd_crea, ricevi_tipo_partita, ricevi_nome_partita,
+    ricevi_data_partita, conferma_crea_partita, gestisci_voto,
+    TIPO, NOME_PARTITA, DATA_PARTITA
+)
 from scheduler import avvia_scheduler, ferma_scheduler
+
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -91,6 +97,26 @@ def main():
         per_chat=False
     )
     app.add_handler(conv_apri)
+
+    # --- Crea partita ---
+    conv_crea = ConversationHandler(
+        entry_points=[CommandHandler("crea", cmd_crea, filters=filters.ChatType.GROUPS)],
+        states={
+            TIPO:         [CallbackQueryHandler(ricevi_tipo_partita, pattern="^tipo_")],
+            NOME_PARTITA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ricevi_nome_partita)],
+            DATA_PARTITA: [
+                CallbackQueryHandler(ricevi_data_partita, pattern="^data_"),
+                CallbackQueryHandler(conferma_crea_partita, pattern="^(conferma_crea|annulla_crea)$"),
+            ],
+        },
+        fallbacks=[CommandHandler("annulla", annulla)],
+        per_user=True,
+        per_chat=False
+    )
+    app.add_handler(conv_crea)
+
+    # --- Voti presenze ---
+    app.add_handler(CallbackQueryHandler(gestisci_voto, pattern="^voto_"))
 
     # --- Handler admin ---
     app.add_handler(CommandHandler("start", cmd_start, filters=filters.ChatType.PRIVATE))

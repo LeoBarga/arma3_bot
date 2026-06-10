@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from db import get_pool, chiudi_sondaggio, get_medie_sondaggio
+from handlers.presenze import pulizia_serate_vecchie
 import aiomysql
 
 logger = logging.getLogger(__name__)
@@ -123,8 +124,15 @@ def avvia_scheduler(bot):
         args=[bot],
         id="controlla_sondaggi"
     )
+    scheduler.add_job(
+        pulizia_serate_vecchie,
+        trigger="cron",
+        hour=3,
+        minute=0,
+        id="pulizia_serate"
+    )
     scheduler.start()
-    logger.info("Scheduler avviato — controllo sondaggi ogni minuto.")
+    logger.info("Scheduler avviato.")
 
 def ferma_scheduler():
     scheduler.shutdown()
