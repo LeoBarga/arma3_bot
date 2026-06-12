@@ -26,22 +26,29 @@ login_manager.login_view = "login"
 limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri="memory://")
 
 class WuiUtente(UserMixin):
-    def __init__(self, id, username):
-        self.id = id
+    def __init__(self, id, username, ruolo):
+        self.id     = id
         self.username = username
+        self.ruolo  = ruolo
 
 @login_manager.user_loader
 def load_user(user_id):
     row = db("SELECT * FROM wui_utenti WHERE id = %s", (user_id,), fetch="one")
     if row:
-        return WuiUtente(row["id"], row["username"])
+        return WuiUtente(row["id"], row["username"], row["ruolo"])
     return None
 
 @app.before_request
 def controlla_auth():
     percorsi_pubblici = ["login", "static"]
+    percorsi_config   = ["configuratore", "configuratore_partita", "configuratore_salva"]
+
     if not current_user.is_authenticated and request.endpoint not in percorsi_pubblici:
         return redirect(url_for("login"))
+
+    if current_user.is_authenticated and current_user.ruolo == "config":
+        if request.endpoint not in percorsi_config + percorsi_pubblici:
+            return redirect(url_for("configuratore"))
 
 # ============================================================
 # DB SINCRONO — solo per la WUI
@@ -116,8 +123,8 @@ def login():
 
         row = db("SELECT * FROM wui_utenti WHERE username = %s", (username,), fetch="one")
         if row and bcrypt.checkpw(password.encode(), row["password_hash"].encode()):
-    	    login_user(WuiUtente(row["id"], row["username"]))
-    	    return redirect(url_for("index"))
+            login_user(WuiUtente(row["id"], row["username"], row["ruolo"]))
+            return redirect(url_for("index"))
 
         flash("Credenziali non valide.")
     return render_template("login.html")
