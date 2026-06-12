@@ -41,11 +41,19 @@ def load_user(user_id):
 @app.before_request
 def controlla_auth():
     percorsi_pubblici = ["login", "static"]
-    percorsi_config   = ["configuratore", "configuratore_partita", "configuratore_salva"]
-
+    percorsi_config   = [
+        "configuratore",
+        "configuratore_partita",
+        "configuratore_salva",
+        "squadra_nuova",
+        "squadra_modifica",
+        "squadra_elimina",
+        "squadra_aggiungi_membro",
+        "membro_ruolo",
+        "membro_elimina"
+    ]
     if not current_user.is_authenticated and request.endpoint not in percorsi_pubblici:
         return redirect(url_for("login"))
-
     if current_user.is_authenticated and current_user.ruolo == "config":
         if request.endpoint not in percorsi_config + percorsi_pubblici:
             return redirect(url_for("configuratore"))
@@ -99,6 +107,18 @@ def run_calcolo(coro_func, *args):
         return loop.run_until_complete(runner())
     finally:
         loop.close()
+
+@app.context_processor
+def utility_processor():
+    def db_ruoli_utente(utente_id):
+        return db("""
+            SELECT r.id, r.nome
+            FROM utenti_ruoli ur
+            JOIN ruoli r ON ur.ruolo_id = r.id
+            WHERE ur.utente_id = %s AND ur.stato = 'ottenuto'
+            ORDER BY r.nome
+        """, (utente_id,), fetch="all") or []
+    return dict(db_ruoli_utente=db_ruoli_utente)
 
 
 # ============================================================
@@ -486,6 +506,51 @@ def ruoli_elimina(id):
     flash("Ruolo eliminato.")
     return redirect(url_for("ruoli"))
 
+
+# ============================================================
+# MODULI
+# ============================================================
+
+@app.route("/moduli")
+def moduli():
+    rows = db("SELECT * FROM moduli ORDER BY nome", fetch="all")
+    return render_template("moduli.html", moduli=rows)
+
+@app.route("/moduli/nuovo", methods=["GET","POST"])
+def moduli_nuovo():
+    if request.method == "POST":
+        db("INSERT INTO moduli (nome, descrizione, obbligatorio) VALUES (%s,%s,%s)", (
+            request.form["nome"],
+            request.form.get("descrizione") or None,
+            1 if request.form.get("obbligatorio") else 0
+        ))
+        flash("Modulo creato.")
+        return redirect(url_for("moduli"))
+    return render_template("moduli_form.html", modulo=None)
+
+@app.route("/moduli/<int:id>/modifica", methods=["GET","POST"])
+def moduli_modifica(id):
+    modulo = db("SELECT * FROM moduli WHERE id = %s", (id,), fetch="one")
+    if request.method == "POST":
+        db("UPDATE moduli SET nome=%s, descrizione=%s, obbligatorio=%s, attivo=%s WHERE id=%s", (
+            request.form["nome"],
+            request.form.get("descrizione") or None,
+            1 if request.form.get("obbligatorio") else 0,
+            1 if request.form.get("attivo") else 0,
+            id
+        ))
+        flash("Modulo aggiornato.")
+        return redirect(url_for("moduli"))
+    return render_template("moduli_form.html", modulo=modulo)
+
+@app.route("/moduli/<int:id>/elimina", methods=["POST"])
+def moduli_elimina(id):
+    db("DELETE FROM reclute_moduli WHERE modulo_id = %s", (id,))
+    db("DELETE FROM moduli WHERE id = %s", (id,))
+    flash("Modulo eliminato.")
+    return redirect(url_for("moduli"))
+
+
 # ============================================================
 # ANNI DI GIOCO
 # ============================================================
@@ -591,6 +656,21 @@ def partite_modifica(id):
 
 @app.route("/partite/<int:id>/elimina", methods=["POST"])
 def partite_elimina(id):
+    # Configurazioni squadre
+    configs = db("SELECT id FROM configurazioni WHERE partita_id = %s", (id,), fetch="all")
+    for c in configs:
+        squadre = db("SELECT id FROM squadre_config WHERE configurazione_id = %s", (c["id"],), fetch="all")
+        for s in squadre:
+            db("DELETE FROM squadre_config_membri WHERE squadra_id = %s", (s["id"],))
+        db("DELETE FROM squadre_config WHERE configurazione_id = %s", (c["id"],))
+    db("DELETE FROM configurazioni WHERE partita_id = %s", (id,))
+
+    # Sondaggi presenze
+    sondaggi = db("SELECT id FROM sondaggi_presenze WHERE partita_id = %s", (id,), fetch="all")
+    for s in sondaggi:
+        db("DELETE FROM voti_presenze WHERE sondaggio_id = %s", (s["id"],))
+    db("DELETE FROM sondaggi_presenze WHERE partita_id = %s", (id,))
+
     db("DELETE FROM presenze WHERE partita_id = %s", (id,))
     db("DELETE FROM partite WHERE id = %s", (id,))
     flash("Partita eliminata.")
@@ -699,6 +779,187 @@ def domande_toggle(id, domanda_id):
     nuovo_stato = 0 if domanda["attiva"] else 1
     db("UPDATE domande SET attiva = %s WHERE id = %s", (nuovo_stato, domanda_id))
     return redirect(url_for("sondaggi_domande", id=id))
+
+
+# ============================================================
+# CONFIGURATORE SQUADRE
+# ============================================================
+
+@app.route("/configuratore")
+def configuratore():
+    # Mostra le partite con sondaggio presenze aperto
+    partite = db("""
+        SELECT p.*, sp.id as sondaggio_id
+        FROM partite p
+        JOIN sondaggi_presenze sp ON sp.partita_id = p.id
+        WHERE sp.aperto = TRUE
+        ORDER BY p.data_ora DESC
+    """, fetch="all")
+    return render_template("configuratore.html", partite=partite)
+
+@app.route("/configuratore/<int:partita_id>")
+def configuratore_partita(partita_id):
+    partita = db("SELECT * FROM partite WHERE id = %s", (partita_id,), fetch="one")
+    if not partita:
+        flash("Partita non trovata.")
+        return redirect(url_for("configuratore"))
+
+    # Cerca configurazione esistente o creane una nuova
+    config = db(
+        "SELECT * FROM configurazioni WHERE partita_id = %s ORDER BY id DESC LIMIT 1",
+        (partita_id,), fetch="one"
+    )
+    if not config:
+        config_id = db(
+            "INSERT INTO configurazioni (partita_id) VALUES (%s)",
+            (partita_id,)
+        )
+        config = db("SELECT * FROM configurazioni WHERE id = %s", (config_id,), fetch="one")
+
+    # Carica squadre
+    squadre = db("""
+        SELECT * FROM squadre_config
+        WHERE configurazione_id = %s
+        ORDER BY ordine
+    """, (config["id"],), fetch="all")
+
+    # Per ogni squadra carica i membri
+    squadre_dati = []
+    for s in squadre:
+        membri = db("""
+            SELECT scm.*, u.username, u.nome as nome_telegram,
+                   g.nome as grado_nome, g.grado_id_formula,
+                   r.nome as ruolo_nome
+            FROM squadre_config_membri scm
+            JOIN utenti u ON scm.utente_id = u.id
+            LEFT JOIN gradi g ON u.grado_id = g.id
+            LEFT JOIN ruoli r ON scm.ruolo_id = r.id
+            WHERE scm.squadra_id = %s
+            ORDER BY g.ordine DESC
+        """, (s["id"],), fetch="all")
+
+        # Calcola comandabilità
+        valori = [m["grado_id_formula"] for m in membri if m["grado_id_formula"]]
+        if valori:
+            media = sum(valori) / len(valori)
+        else:
+            media = 0
+
+        if media == 0:
+            cmd_livello = "nulla"
+            cmd_colore  = "#555"
+            cmd_pct     = 0
+        elif media < 3:
+            cmd_livello = "bassa"
+            cmd_colore  = "#ef5350"
+            cmd_pct     = 20
+        elif media < 8:
+            cmd_livello = "discreta"
+            cmd_colore  = "#ff9800"
+            cmd_pct     = 50
+        elif media < 13:
+            cmd_livello = "ottima"
+            cmd_colore  = "#66bb6a"
+            cmd_pct     = 80
+        else:
+            cmd_livello = "eccellente"
+            cmd_colore  = "#42a5f5"
+            cmd_pct     = 100
+
+        squadre_dati.append({
+            "squadra": s,
+            "membri":  membri,
+            "cmd_livello": cmd_livello,
+            "cmd_colore":  cmd_colore,
+            "cmd_pct":     cmd_pct,
+            "cmd_media":   round(media, 1)
+        })
+
+    # Giocatori presenti non ancora assegnati
+    assegnati_ids = [
+        m["utente_id"]
+        for sd in squadre_dati
+        for m in sd["membri"]
+    ]
+
+    placeholders = ",".join(["%s"] * len(assegnati_ids)) if assegnati_ids else "0"
+    disponibili = db(f"""
+        SELECT u.id, u.username, u.nome as nome_telegram,
+               g.nome as grado_nome, g.ordine as grado_ordine
+        FROM voti_presenze vp
+        JOIN sondaggi_presenze sp ON vp.sondaggio_id = sp.id
+        JOIN utenti u ON vp.utente_id = u.id
+        LEFT JOIN gradi g ON u.grado_id = g.id
+        WHERE sp.partita_id = %s
+          AND vp.voto = 'presente'
+          AND u.id NOT IN ({placeholders})
+        ORDER BY g.ordine DESC, u.username
+    """, tuple([partita_id] + assegnati_ids), fetch="all")
+
+    return render_template("configuratore_partita.html",
+        partita=partita,
+        config=config,
+        squadre=squadre_dati,
+        disponibili=disponibili
+    )
+
+@app.route("/configuratore/<int:config_id>/squadra/nuova", methods=["POST"])
+def squadra_nuova(config_id):
+    config = db("SELECT * FROM configurazioni WHERE id = %s", (config_id,), fetch="one")
+    db("INSERT INTO squadre_config (configurazione_id, nome, ordine) VALUES (%s, %s, %s)",
+       (config_id, "Nuova Squadra", 0))
+    return redirect(url_for("configuratore_partita", partita_id=config["partita_id"]))
+
+@app.route("/configuratore/squadra/<int:squadra_id>/modifica", methods=["POST"])
+def squadra_modifica(squadra_id):
+    squadra = db("SELECT * FROM squadre_config WHERE id = %s", (squadra_id,), fetch="one")
+    config  = db("SELECT * FROM configurazioni WHERE id = %s", (squadra["configurazione_id"],), fetch="one")
+    db("""
+        UPDATE squadre_config
+        SET nome=%s, callsign=%s, radio=%s, mezzo=%s, note=%s
+        WHERE id=%s
+    """, (
+        request.form.get("nome", ""),
+        request.form.get("callsign", "") or None,
+        request.form.get("radio", "") or None,
+        request.form.get("mezzo", "") or None,
+        request.form.get("note", "") or None,
+        squadra_id
+    ))
+    return redirect(url_for("configuratore_partita", partita_id=config["partita_id"]))
+
+@app.route("/configuratore/squadra/<int:squadra_id>/elimina", methods=["POST"])
+def squadra_elimina(squadra_id):
+    squadra = db("SELECT * FROM squadre_config WHERE id = %s", (squadra_id,), fetch="one")
+    config  = db("SELECT * FROM configurazioni WHERE id = %s", (squadra["configurazione_id"],), fetch="one")
+    db("DELETE FROM squadre_config_membri WHERE squadra_id = %s", (squadra_id,))
+    db("DELETE FROM squadre_config WHERE id = %s", (squadra_id,))
+    return redirect(url_for("configuratore_partita", partita_id=config["partita_id"]))
+
+@app.route("/configuratore/squadra/<int:squadra_id>/aggiungi_membro", methods=["POST"])
+def squadra_aggiungi_membro(squadra_id):
+    squadra    = db("SELECT * FROM squadre_config WHERE id = %s", (squadra_id,), fetch="one")
+    config     = db("SELECT * FROM configurazioni WHERE id = %s", (squadra["configurazione_id"],), fetch="one")
+    utente_id  = request.form.get("utente_id")
+    if utente_id:
+        db("INSERT IGNORE INTO squadre_config_membri (squadra_id, utente_id) VALUES (%s,%s)",
+           (squadra_id, utente_id))
+    return redirect(url_for("configuratore_partita", partita_id=config["partita_id"]))
+
+@app.route("/configuratore/membro/<int:membro_id>/ruolo", methods=["POST"])
+def membro_ruolo(membro_id):
+    membro  = db("SELECT scm.*, sc.configurazione_id FROM squadre_config_membri scm JOIN squadre_config sc ON scm.squadra_id = sc.id WHERE scm.id = %s", (membro_id,), fetch="one")
+    config  = db("SELECT * FROM configurazioni WHERE id = %s", (membro["configurazione_id"],), fetch="one")
+    ruolo_id = request.form.get("ruolo_id") or None
+    db("UPDATE squadre_config_membri SET ruolo_id = %s WHERE id = %s", (ruolo_id, membro_id))
+    return redirect(url_for("configuratore_partita", partita_id=config["partita_id"]))
+
+@app.route("/configuratore/membro/<int:membro_id>/elimina", methods=["POST"])
+def membro_elimina(membro_id):
+    membro = db("SELECT scm.*, sc.configurazione_id FROM squadre_config_membri scm JOIN squadre_config sc ON scm.squadra_id = sc.id WHERE scm.id = %s", (membro_id,), fetch="one")
+    config = db("SELECT * FROM configurazioni WHERE id = %s", (membro["configurazione_id"],), fetch="one")
+    db("DELETE FROM squadre_config_membri WHERE id = %s", (membro_id,))
+    return redirect(url_for("configuratore_partita", partita_id=config["partita_id"]))
 
 
 # ============================================================

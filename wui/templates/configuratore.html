@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="top-bar">
+    <h1>Configuratore Squadre</h1>
+</div>
+
+{% if partite %}
+<div class="card">
+    <p style="color:#a0c4ff; margin-bottom:16px;">Seleziona la serata da configurare:</p>
+    <table>
+        <thead><tr>
+            <th>Serata</th><th>Data</th><th>Azioni</th>
+        </tr></thead>
+        <tbody>
+        {% for p in partite %}
+        <tr>
+            <td>{{ p.nome }}</td>
+            <td>{{ p.data_ora.strftime('%d/%m/%Y') }}</td>
+            <td>
+                <a href="/configuratore/{{ p.id }}" class="btn btn-primary">Configura</a>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card">
+    <p style="color:#888;">Nessuna serata con sondaggio aperto al momento.</p>
+</div>
+{% endif %}
+{% endblock %}

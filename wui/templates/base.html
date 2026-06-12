@@ -37,12 +37,16 @@
 <body>
 <nav>
     <span class="brand">Arma3 Admin</span>
+    {% if current_user.ruolo == 'admin' %}
     <a href="/utenti">Utenti</a>
     <a href="/gradi">Gradi</a>
     <a href="/ruoli">Ruoli</a>
+    <a href="/moduli">Moduli</a>
     <a href="/anni">Anni di gioco</a>
     <a href="/partite">Partite</a>
     <a href="/sondaggi">Sondaggi</a>
+    {% endif %}
+    <a href="/configuratore">Configuratore</a>
     <a href="/logout" style="margin-left:auto; color:#ef5350;">Esci</a>
 </nav>
 </nav>

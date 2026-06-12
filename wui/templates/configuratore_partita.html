@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.squadra-col {
+    background: #16213e;
+    border-radius: 6px;
+    padding: 16px;
+    min-width: 280px;
+    max-width: 320px;
+    flex-shrink: 0;
+}
+.squadre-container {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding-bottom: 16px;
+    align-items: flex-start;
+}
+.cmd-bar-outer {
+    background: #0f3460;
+    border-radius: 4px;
+    height: 8px;
+    margin: 6px 0 2px 0;
+}
+.cmd-bar-inner {
+    height: 8px;
+    border-radius: 4px;
+    transition: width 0.3s;
+}
+.membro-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    background: #0f3460;
+    border-radius: 4px;
+    padding: 6px 8px;
+}
+.field-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.field-row input {
+    flex: 1;
+    font-size: 12px;
+    padding: 4px 6px;
+}
+.field-label {
+    font-size: 11px;
+    color: #a0c4ff;
+    margin-bottom: 2px;
+}
+</style>
+
+<div class="top-bar" style="margin-bottom:20px;">
+    <h1>{{ partita.nome }}</h1>
+    <a href="/configuratore" class="btn btn-warning">← Torna</a>
+</div>
+
+<!-- RIEPILOGO TESTUALE -->
+<div class="card" style="margin-bottom:20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span style="color:#a0c4ff; font-size:13px;">Riepilogo da copiare nel gruppo</span>
+        <button onclick="copiaRiepilogo()" class="btn btn-primary" style="font-size:12px;">📋 Copia riepilogo</button>
+    </div>
+    <textarea id="riepilogo" readonly style="width:100%; height:120px; font-size:12px; font-family:monospace; background:#0f3460; color:#e0e0e0; border:none; border-radius:4px; padding:8px; resize:vertical;">{% for sd in squadre %}🔹 {{ sd.squadra.nome }}{% if sd.squadra.callsign %} [{{ sd.squadra.callsign }}]{% endif %}{% if sd.squadra.radio %} | Radio: {{ sd.squadra.radio }}{% endif %}{% if sd.squadra.mezzo %} | Mezzo: {{ sd.squadra.mezzo }}{% endif %}
+
+{% for m in sd.membri %}  • {{ m.username or m.nome_telegram }}{% if m.ruolo_nome %} — {{ m.ruolo_nome }}{% endif %}
+
+{% endfor %}
+{% endfor %}</textarea>
+</div>
+
+<!-- SQUADRE -->
+<div class="squadre-container">
+
+{% for sd in squadre %}
+<div class="squadra-col">
+
+    <!-- Intestazione squadra -->
+    <form method="post" action="/configuratore/squadra/{{ sd.squadra.id }}/modifica">
+        <div class="field-label">Nome squadra</div>
+        <div class="field-row">
+            <input name="nome" value="{{ sd.squadra.nome }}" placeholder="Nome squadra">
+            <button class="btn btn-primary" type="submit" style="font-size:11px; padding:4px 8px;">✓</button>
+        </div>
+        <div class="field-label">Callsign</div>
+        <div class="field-row">
+            <input name="callsign" value="{{ sd.squadra.callsign or '' }}" placeholder="Callsign">
+        </div>
+        <div class="field-label">Radio</div>
+        <div class="field-row">
+            <input name="radio" value="{{ sd.squadra.radio or '' }}" placeholder="Frequenza radio">
+        </div>
+        <div class="field-label">Mezzo</div>
+        <div class="field-row">
+            <input name="mezzo" value="{{ sd.squadra.mezzo or '' }}" placeholder="Mezzo assegnato">
+        </div>
+        <div class="field-label">Note</div>
+        <div class="field-row">
+            <input name="note" value="{{ sd.squadra.note or '' }}" placeholder="Note">
+        </div>
+    </form>
+
+    <!-- Comandabilità -->
+    <div style="margin:10px 0 12px 0;">
+        <div style="display:flex; justify-content:space-between; font-size:11px; color:#a0c4ff;">
+            <span>Comandabilità</span>
+            <span style="color:{{ sd.cmd_colore }};">{{ sd.cmd_livello }} ({{ sd.cmd_media }})</span>
+        </div>
+        <div class="cmd-bar-outer">
+            <div class="cmd-bar-inner" style="width:{{ sd.cmd_pct }}%; background:{{ sd.cmd_colore }};"></div>
+        </div>
+    </div>
+
+    <!-- Membri -->
+    <div style="margin-bottom:10px;">
+        {% for m in sd.membri %}
+        <div class="membro-row">
+            <div style="flex:1; min-width:0;">
+                <div style="font-size:12px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    {{ m.username or m.nome_telegram }}
+                </div>
+                <div style="font-size:11px; color:#a0c4ff;">{{ m.grado_nome or "Recluta" }}</div>
+            </div>
+            <!-- Selezione ruolo -->
+            <form method="post" action="/configuratore/membro/{{ m.id }}/ruolo" style="flex:1;">
+                <select name="ruolo_id" onchange="this.form.submit()" style="width:100%; font-size:11px; padding:2px 4px;">
+                    <option value="">— ruolo —</option>
+                    {% set ruoli_utente = namespace(lista=[]) %}
+                    {% for r in db_ruoli_utente(m.utente_id) %}
+                    <option value="{{ r.id }}" {{ 'selected' if m.ruolo_id == r.id }}>{{ r.nome }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            <!-- Rimuovi -->
+            <form method="post" action="/configuratore/membro/{{ m.id }}/elimina">
+                <button type="submit" style="background:none; border:none; color:#ef5350; cursor:pointer; font-size:14px;">✕</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Aggiungi membro -->
+    {% if disponibili %}
+    <form method="post" action="/configuratore/squadra/{{ sd.squadra.id }}/aggiungi_membro"
+          style="display:flex; gap:4px; margin-bottom:10px;">
+        <select name="utente_id" style="flex:1; font-size:12px;">
+            <option value="">+ Aggiungi</option>
+            {% for d in disponibili %}
+            <option value="{{ d.id }}">{{ d.username or d.nome_telegram }} ({{ d.grado_nome or 'Recluta' }})</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary" type="submit" style="font-size:11px; padding:4px 8px;">+</button>
+    </form>
+    {% endif %}
+
+    <!-- Elimina squadra -->
+    <form method="post" action="/configuratore/squadra/{{ sd.squadra.id }}/elimina"
+          onsubmit="return confirm('Eliminare questa squadra?')" style="text-align:right;">
+        <button class="btn btn-danger" type="submit" style="font-size:11px;">Elimina squadra</button>
+    </form>
+
+</div>
+{% endfor %}
+
+<!-- Nuova squadra -->
+<div style="display:flex; align-items:center; padding:16px;">
+    <form method="post" action="/configuratore/{{ config.id }}/squadra/nuova">
+        <button class="btn btn-primary" type="submit" style="font-size:22px; padding:12px 20px;">+</button>
+    </form>
+</div>
+
+</div>
+
+<script>
+function copiaRiepilogo() {
+    const ta = document.getElementById('riepilogo');
+    ta.select();
+    document.execCommand('copy');
+    alert('Riepilogo copiato!');
+}
+</script>
+
+{% endblock %}
