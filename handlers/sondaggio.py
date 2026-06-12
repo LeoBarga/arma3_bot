@@ -744,7 +744,7 @@ async def annulla(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if risposta_id:
         await elimina_risposta(risposta_id)
     context.user_data.clear()
-    await update.message.reply_text("❌ Valutazione annullata.")
+    await update.message.reply_text("❌ Operazione annullata.")
     return ConversationHandler.END
 
 async def manda_domanda(message, context):
