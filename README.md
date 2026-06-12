@@ -13,6 +13,7 @@ pannello di amministrazione web e configuratore squadre.
 
 ## Struttura del progetto
 
+```
 arma3_bot/
 ├── handlers/
 │   ├── __init__.py
@@ -34,6 +35,7 @@ arma3_bot/
 ├── .env.example          # template credenziali
 ├── .gitignore
 └── requirements.txt
+```
 
 ## Setup iniziale
 
