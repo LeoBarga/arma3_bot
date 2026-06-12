@@ -18,6 +18,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "cambia_questa_chiave")
+app.jinja_env.filters['enumerate'] = enumerate
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -49,8 +50,11 @@ def controlla_auth():
         "squadra_modifica",
         "squadra_elimina",
         "squadra_aggiungi_membro",
+        "squadra_colore",
+        "squadra_ordine_membri",
         "membro_ruolo",
-        "membro_elimina"
+        "membro_elimina",
+	"membro_colore"
     ]
     if not current_user.is_authenticated and request.endpoint not in percorsi_pubblici:
         return redirect(url_for("login"))
@@ -835,7 +839,7 @@ def configuratore_partita(partita_id):
             LEFT JOIN gradi g ON u.grado_id = g.id
             LEFT JOIN ruoli r ON scm.ruolo_id = r.id
             WHERE scm.squadra_id = %s
-            ORDER BY g.ordine DESC
+            ORDER BY scm.ordine, scm.id
         """, (s["id"],), fetch="all")
 
         # Calcola comandabilità
@@ -960,6 +964,31 @@ def membro_elimina(membro_id):
     config = db("SELECT * FROM configurazioni WHERE id = %s", (membro["configurazione_id"],), fetch="one")
     db("DELETE FROM squadre_config_membri WHERE id = %s", (membro_id,))
     return redirect(url_for("configuratore_partita", partita_id=config["partita_id"]))
+
+@app.route("/configuratore/squadra/<int:squadra_id>/colore", methods=["POST"])
+def squadra_colore(squadra_id):
+    squadra = db("SELECT * FROM squadre_config WHERE id = %s", (squadra_id,), fetch="one")
+    config  = db("SELECT * FROM configurazioni WHERE id = %s", (squadra["configurazione_id"],), fetch="one")
+    db("UPDATE squadre_config SET colore = %s WHERE id = %s",
+       (request.form.get("colore", "bianco"), squadra_id))
+    return redirect(url_for("configuratore_partita", partita_id=config["partita_id"]))
+
+@app.route("/configuratore/membro/<int:membro_id>/colore", methods=["POST"])
+def membro_colore(membro_id):
+    membro = db("SELECT scm.*, sc.configurazione_id FROM squadre_config_membri scm JOIN squadre_config sc ON scm.squadra_id = sc.id WHERE scm.id = %s", (membro_id,), fetch="one")
+    config = db("SELECT * FROM configurazioni WHERE id = %s", (membro["configurazione_id"],), fetch="one")
+    db("UPDATE squadre_config_membri SET colore = %s WHERE id = %s",
+       (request.form.get("colore", "bianco"), membro_id))
+    return redirect(url_for("configuratore_partita", partita_id=config["partita_id"]))
+
+@app.route("/configuratore/squadra/<int:squadra_id>/ordine", methods=["POST"])
+def squadra_ordine_membri(squadra_id):
+    import json
+    data   = request.get_json()
+    ordine = data.get("ordine", [])
+    for i, membro_id in enumerate(ordine):
+        db("UPDATE squadre_config_membri SET ordine = %s WHERE id = %s", (i, membro_id))
+    return "", 204
 
 
 # ============================================================

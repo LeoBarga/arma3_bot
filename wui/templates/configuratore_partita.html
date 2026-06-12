@@ -2,14 +2,10 @@
 {% block content %}
 
 <style>
-.squadra-col {
-    background: #16213e;
-    border-radius: 6px;
-    padding: 16px;
-    min-width: 280px;
-    max-width: 320px;
-    flex-shrink: 0;
+:root {
+    --col-min: 300px;
 }
+
 .squadre-container {
     display: flex;
     gap: 16px;
@@ -17,6 +13,16 @@
     padding-bottom: 16px;
     align-items: flex-start;
 }
+
+.squadra-col {
+    background: #16213e;
+    border-radius: 6px;
+    padding: 16px;
+    min-width: var(--col-min);
+    width: var(--col-min);
+    flex-shrink: 0;
+}
+
 .cmd-bar-outer {
     background: #0f3460;
     border-radius: 4px;
@@ -26,8 +32,21 @@
 .cmd-bar-inner {
     height: 8px;
     border-radius: 4px;
-    transition: width 0.3s;
 }
+
+.pallino {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.pallino-squadra {
+    width: 20px;
+    height: 20px;
+}
+
 .membro-row {
     display: flex;
     align-items: center;
@@ -36,7 +55,12 @@
     background: #0f3460;
     border-radius: 4px;
     padding: 6px 8px;
+    cursor: grab;
 }
+.membro-row.dragging {
+    opacity: 0.5;
+}
+
 .field-row {
     display: flex;
     gap: 6px;
@@ -52,23 +76,109 @@
     color: #a0c4ff;
     margin-bottom: 2px;
 }
+.numero-membro {
+    font-size: 11px;
+    color: #a0c4ff;
+    min-width: 16px;
+    text-align: center;
+}
+
+.color-picker {
+    display: none;
+    position: absolute;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+    padding: 8px;
+    z-index: 100;
+    gap: 6px;
+    flex-wrap: wrap;
+    width: 140px;
+}
+.color-picker.visible {
+    display: flex;
+}
+.color-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+}
+.color-dot:hover {
+    border-color: #fff;
+}
+
+#riepilogo {
+    width: 100%;
+    height: 160px;
+    font-size: 13px;
+    font-family: monospace;
+    background: #0f3460;
+    color: #e0e0e0;
+    border: none;
+    border-radius: 4px;
+    padding: 10px;
+    resize: vertical;
+}
+
+@media (max-width: 768px) {
+    .squadre-container {
+        flex-direction: column;
+        overflow-x: visible;
+    }
+    .squadra-col {
+        width: 100%;
+        min-width: unset;
+    }
+}
+@media (orientation: landscape) and (max-width: 1024px) {
+    .squadre-container {
+        flex-direction: row;
+        overflow-x: auto;
+    }
+    .squadra-col {
+        min-width: var(--col-min);
+        width: var(--col-min);
+    }
+}
 </style>
+
+{% set COLORI = {
+    'bianco':  '#ffffff',
+    'giallo':  '#ffeb3b',
+    'rosso':   '#ef5350',
+    'verde':   '#66bb6a',
+    'ciano':   '#26c6da',
+    'magenta': '#ab47bc',
+    'nero':    '#212121',
+    'grigio':  '#9e9e9e',
+    'blu':     '#42a5f5'
+} %}
 
 <div class="top-bar" style="margin-bottom:20px;">
     <h1>{{ partita.nome }}</h1>
     <a href="/configuratore" class="btn btn-warning">← Torna</a>
 </div>
 
-<!-- RIEPILOGO TESTUALE -->
+{% set EMOJI_COLORI = {
+    'bianco':  '⚪',
+    'giallo':  '🟡',
+    'rosso':   '🔴',
+    'verde':   '🟢',
+    'magenta': '🟣',
+    'nero':    '⚫',
+    'blu':     '🔵'
+} %}
+
+<!-- RIEPILOGO -->
 <div class="card" style="margin-bottom:20px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <span style="color:#a0c4ff; font-size:13px;">Riepilogo da copiare nel gruppo</span>
-        <button onclick="copiaRiepilogo()" class="btn btn-primary" style="font-size:12px;">📋 Copia riepilogo</button>
+        <span style="color:#a0c4ff; font-size:13px;">Riepilogo</span>
+        <button onclick="copiaRiepilogo()" class="btn btn-primary" style="font-size:12px;">📋 Copia</button>
     </div>
-    <textarea id="riepilogo" readonly style="width:100%; height:120px; font-size:12px; font-family:monospace; background:#0f3460; color:#e0e0e0; border:none; border-radius:4px; padding:8px; resize:vertical;">{% for sd in squadre %}🔹 {{ sd.squadra.nome }}{% if sd.squadra.callsign %} [{{ sd.squadra.callsign }}]{% endif %}{% if sd.squadra.radio %} | Radio: {{ sd.squadra.radio }}{% endif %}{% if sd.squadra.mezzo %} | Mezzo: {{ sd.squadra.mezzo }}{% endif %}
-
-{% for m in sd.membri %}  • {{ m.username or m.nome_telegram }}{% if m.ruolo_nome %} — {{ m.ruolo_nome }}{% endif %}
-
+    <textarea id="riepilogo" readonly>{% for sd in squadre %}{{ EMOJI_COLORI.get(sd.squadra.colore, '⚪') }} {{ sd.squadra.nome }}{% if sd.squadra.callsign %} [{{ sd.squadra.callsign }}]{% endif %}{% if sd.squadra.radio %} | Radio: {{ sd.squadra.radio }}{% endif %}{% if sd.squadra.mezzo %} | Mezzo: {{ sd.squadra.mezzo }}{% endif %}
+{% for i, m in sd.membri|enumerate %}{{ i+1 }}. {{ EMOJI_COLORI.get(m.colore, '⚪') }} {{ m.username or m.nome_telegram }}{% if m.ruolo_nome %} — {{ m.ruolo_nome }}{% endif %}
 {% endfor %}
 {% endfor %}</textarea>
 </div>
@@ -79,29 +189,37 @@
 {% for sd in squadre %}
 <div class="squadra-col">
 
-    <!-- Intestazione squadra -->
-    <form method="post" action="/configuratore/squadra/{{ sd.squadra.id }}/modifica">
+    <!-- Intestazione con pallino colorato -->
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; position:relative;">
+        <span class="pallino pallino-squadra"
+              style="background:{{ COLORI[sd.squadra.colore] if sd.squadra.colore in COLORI else '#ffffff' }};"
+              onclick="togglePicker('picker-sq-{{ sd.squadra.id }}')"></span>
+        <div id="picker-sq-{{ sd.squadra.id }}" class="color-picker">
+            {% for nome, hex in COLORI.items() %}
+            <form method="post" action="/configuratore/squadra/{{ sd.squadra.id }}/colore" style="display:inline;">
+                <input type="hidden" name="colore" value="{{ nome }}">
+                <button type="submit" class="color-dot" style="background:{{ hex }};" title="{{ nome }}"></button>
+            </form>
+            {% endfor %}
+        </div>
+        <strong style="font-size:14px;">{{ sd.squadra.nome }}</strong>
+    </div>
+
+    <!-- Campi squadra -->
+   <form method="post" action="/configuratore/squadra/{{ sd.squadra.id }}/modifica">
         <div class="field-label">Nome squadra</div>
         <div class="field-row">
-            <input name="nome" value="{{ sd.squadra.nome }}" placeholder="Nome squadra">
-            <button class="btn btn-primary" type="submit" style="font-size:11px; padding:4px 8px;">✓</button>
+            <input name="nome" value="{{ sd.squadra.nome }}">
         </div>
         <div class="field-label">Callsign</div>
-        <div class="field-row">
-            <input name="callsign" value="{{ sd.squadra.callsign or '' }}" placeholder="Callsign">
-        </div>
+        <div class="field-row"><input name="callsign" value="{{ sd.squadra.callsign or '' }}" placeholder="Callsign"></div>
         <div class="field-label">Radio</div>
-        <div class="field-row">
-            <input name="radio" value="{{ sd.squadra.radio or '' }}" placeholder="Frequenza radio">
-        </div>
+        <div class="field-row"><input name="radio" value="{{ sd.squadra.radio or '' }}" placeholder="Frequenza radio"></div>
         <div class="field-label">Mezzo</div>
-        <div class="field-row">
-            <input name="mezzo" value="{{ sd.squadra.mezzo or '' }}" placeholder="Mezzo assegnato">
-        </div>
+        <div class="field-row"><input name="mezzo" value="{{ sd.squadra.mezzo or '' }}" placeholder="Mezzo assegnato"></div>
         <div class="field-label">Note</div>
-        <div class="field-row">
-            <input name="note" value="{{ sd.squadra.note or '' }}" placeholder="Note">
-        </div>
+        <div class="field-row"><input name="note" value="{{ sd.squadra.note or '' }}" placeholder="Note"></div>
+        <button class="btn btn-primary" type="submit" style="width:100%; margin-top:4px;">Salva modifiche squadra</button>
     </form>
 
     <!-- Comandabilità -->
@@ -115,27 +233,36 @@
         </div>
     </div>
 
-    <!-- Membri -->
-    <div style="margin-bottom:10px;">
-        {% for m in sd.membri %}
-        <div class="membro-row">
+    <!-- Membri trascinabili -->
+    <div class="membri-list" data-squadra="{{ sd.squadra.id }}" style="margin-bottom:10px; min-height:20px;">
+        {% for i, m in sd.membri|enumerate %}
+        <div class="membro-row" draggable="true" data-membro="{{ m.id }}">
+            <span class="numero-membro">{{ i+1 }}</span>
+            <span class="pallino"
+                  style="background:{{ COLORI[m.colore] if m.colore in COLORI else '#ffffff' }}; position:relative;"
+                  onclick="togglePicker('picker-m-{{ m.id }}')"></span>
+            <div id="picker-m-{{ m.id }}" class="color-picker">
+                {% for nome, hex in COLORI.items() %}
+                <form method="post" action="/configuratore/membro/{{ m.id }}/colore" style="display:inline;">
+                    <input type="hidden" name="colore" value="{{ nome }}">
+                    <button type="submit" class="color-dot" style="background:{{ hex }};" title="{{ nome }}"></button>
+                </form>
+                {% endfor %}
+            </div>
             <div style="flex:1; min-width:0;">
                 <div style="font-size:12px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                     {{ m.username or m.nome_telegram }}
                 </div>
                 <div style="font-size:11px; color:#a0c4ff;">{{ m.grado_nome or "Recluta" }}</div>
             </div>
-            <!-- Selezione ruolo -->
             <form method="post" action="/configuratore/membro/{{ m.id }}/ruolo" style="flex:1;">
                 <select name="ruolo_id" onchange="this.form.submit()" style="width:100%; font-size:11px; padding:2px 4px;">
                     <option value="">— ruolo —</option>
-                    {% set ruoli_utente = namespace(lista=[]) %}
                     {% for r in db_ruoli_utente(m.utente_id) %}
                     <option value="{{ r.id }}" {{ 'selected' if m.ruolo_id == r.id }}>{{ r.nome }}</option>
                     {% endfor %}
                 </select>
             </form>
-            <!-- Rimuovi -->
             <form method="post" action="/configuratore/membro/{{ m.id }}/elimina">
                 <button type="submit" style="background:none; border:none; color:#ef5350; cursor:pointer; font-size:14px;">✕</button>
             </form>
@@ -148,7 +275,7 @@
     <form method="post" action="/configuratore/squadra/{{ sd.squadra.id }}/aggiungi_membro"
           style="display:flex; gap:4px; margin-bottom:10px;">
         <select name="utente_id" style="flex:1; font-size:12px;">
-            <option value="">+ Aggiungi</option>
+            <option value="">+ Aggiungi membro</option>
             {% for d in disponibili %}
             <option value="{{ d.id }}">{{ d.username or d.nome_telegram }} ({{ d.grado_nome or 'Recluta' }})</option>
             {% endfor %}
@@ -176,6 +303,72 @@
 </div>
 
 <script>
+// Toggle color picker
+function togglePicker(id) {
+    document.querySelectorAll('.color-picker').forEach(p => {
+        if (p.id !== id) p.classList.remove('visible');
+    });
+    document.getElementById(id).classList.toggle('visible');
+}
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.pallino') && !e.target.closest('.color-picker')) {
+        document.querySelectorAll('.color-picker').forEach(p => p.classList.remove('visible'));
+    }
+});
+
+// Drag and drop per riordinare membri
+let dragged = null;
+
+document.querySelectorAll('.membro-row').forEach(row => {
+    row.addEventListener('dragstart', () => {
+        dragged = row;
+        setTimeout(() => row.classList.add('dragging'), 0);
+    });
+    row.addEventListener('dragend', () => {
+        row.classList.remove('dragging');
+        salvaOrdine(row.closest('.membri-list'));
+    });
+    row.addEventListener('dragover', e => {
+        e.preventDefault();
+        const lista = row.closest('.membri-list');
+        const dopo  = getDragAfterElement(lista, e.clientY);
+        if (dopo == null) {
+            lista.appendChild(dragged);
+        } else {
+            lista.insertBefore(dragged, dopo);
+        }
+        aggiornaNumerazione(lista);
+    });
+});
+
+function getDragAfterElement(container, y) {
+    const elementi = [...container.querySelectorAll('.membro-row:not(.dragging)')];
+    return elementi.reduce((closest, child) => {
+        const box    = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+            return { offset, element: child };
+        }
+        return closest;
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+function aggiornaNumerazione(lista) {
+    lista.querySelectorAll('.numero-membro').forEach((n, i) => {
+        n.textContent = i + 1;
+    });
+}
+
+function salvaOrdine(lista) {
+    const squadraId = lista.dataset.squadra;
+    const ordine    = [...lista.querySelectorAll('.membro-row')].map(r => r.dataset.membro);
+    fetch(`/configuratore/squadra/${squadraId}/ordine`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ordine })
+    });
+}
+
 function copiaRiepilogo() {
     const ta = document.getElementById('riepilogo');
     ta.select();
