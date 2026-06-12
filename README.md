@@ -286,7 +286,7 @@ CONFIGURATORE SQUADRE
 - Lista mostra: nome in gioco, grado, flag ritardo
 - Ordinamento per grado decrescente all'interno di ogni categoria
 
-## Manutenzione
+# Manutenzione
 
 ### Aggiungere una migrazione DB
 
@@ -300,9 +300,9 @@ mysqldump -u arma3user -p --single-transaction arma3_bot > backup_$(date +%Y%m%d
 ### Se MariaDB non si avvia (corruzione InnoDB)
 
 sudo nano /etc/mysql/mariadb.conf.d/50-server.cnf
-# Aggiungi: innodb_force_recovery = 1 (aumenta fino a 6 se necessario)
+## Aggiungi: innodb_force_recovery = 1 (aumenta fino a 6 se necessario)
 sudo systemctl start mariadb
-# Fai subito il backup, poi rimuovi innodb_force_recovery e riavvia
+## Fai subito il backup, poi rimuovi innodb_force_recovery e riavvia
 
 ### Cambio password WUI
 
@@ -312,14 +312,14 @@ password = input('Nuova password: ').encode()
 hash = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
 print(f\"UPDATE wui_utenti SET password_hash='{hash}' WHERE username='admin_wui';\")
 "
-# Esegui l'UPDATE nel DB
+## Esegui l'UPDATE nel DB
 
 ## File .gitignore
 
 venv/
 .venv/
 .env
-__pycache__/
+`__pycache__/` 
 *.py[cod]
 *.pyo
 *.log
