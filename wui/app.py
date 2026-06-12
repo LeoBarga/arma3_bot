@@ -833,7 +833,7 @@ def configuratore_partita(partita_id):
         membri = db("""
             SELECT scm.*, u.username, u.nome as nome_telegram,
                    g.nome as grado_nome, g.grado_id_formula,
-                   r.nome as ruolo_nome
+                   r.nome as ruolo_nome, scm.sottoruolo
             FROM squadre_config_membri scm
             JOIN utenti u ON scm.utente_id = u.id
             LEFT JOIN gradi g ON u.grado_id = g.id
@@ -954,8 +954,10 @@ def squadra_aggiungi_membro(squadra_id):
 def membro_ruolo(membro_id):
     membro  = db("SELECT scm.*, sc.configurazione_id FROM squadre_config_membri scm JOIN squadre_config sc ON scm.squadra_id = sc.id WHERE scm.id = %s", (membro_id,), fetch="one")
     config  = db("SELECT * FROM configurazioni WHERE id = %s", (membro["configurazione_id"],), fetch="one")
-    ruolo_id = request.form.get("ruolo_id") or None
-    db("UPDATE squadre_config_membri SET ruolo_id = %s WHERE id = %s", (ruolo_id, membro_id))
+    ruolo_id  = request.form.get("ruolo_id") or None
+    sottoruolo = request.form.get("sottoruolo") or None
+    db("UPDATE squadre_config_membri SET ruolo_id = %s, sottoruolo = %s WHERE id = %s",
+       (ruolo_id, sottoruolo, membro_id))
     return redirect(url_for("configuratore_partita", partita_id=config["partita_id"]))
 
 @app.route("/configuratore/membro/<int:membro_id>/elimina", methods=["POST"])

@@ -178,7 +178,7 @@
         <button onclick="copiaRiepilogo()" class="btn btn-primary" style="font-size:12px;">📋 Copia</button>
     </div>
     <textarea id="riepilogo" readonly>{% for sd in squadre %}{{ EMOJI_COLORI.get(sd.squadra.colore, '⚪') }} {{ sd.squadra.nome }}{% if sd.squadra.callsign %} [{{ sd.squadra.callsign }}]{% endif %}{% if sd.squadra.radio %} | Radio: {{ sd.squadra.radio }}{% endif %}{% if sd.squadra.mezzo %} | Mezzo: {{ sd.squadra.mezzo }}{% endif %}
-{% for i, m in sd.membri|enumerate %}{{ i+1 }}. {{ EMOJI_COLORI.get(m.colore, '⚪') }} {{ m.username or m.nome_telegram }}{% if m.ruolo_nome %} — {{ m.ruolo_nome }}{% endif %}
+{% for i, m in sd.membri|enumerate %}{{ i+1 }}. {{ EMOJI_COLORI.get(m.colore, '⚪') }} {{ m.username or m.nome_telegram }}{% if m.ruolo_nome or m.sottoruolo %} — {{ m.ruolo_nome or '' }}{% if m.sottoruolo %} ({{ m.sottoruolo }}){% endif %}{% endif %}
 {% endfor %}
 {% endfor %}</textarea>
 </div>
@@ -255,17 +255,29 @@
                 </div>
                 <div style="font-size:11px; color:#a0c4ff;">{{ m.grado_nome or "Recluta" }}</div>
             </div>
-            <form method="post" action="/configuratore/membro/{{ m.id }}/ruolo" style="flex:1;">
-                <select name="ruolo_id" onchange="this.form.submit()" style="width:100%; font-size:11px; padding:2px 4px;">
-                    <option value="">— ruolo —</option>
-                    {% for r in db_ruoli_utente(m.utente_id) %}
-                    <option value="{{ r.id }}" {{ 'selected' if m.ruolo_id == r.id }}>{{ r.nome }}</option>
-                    {% endfor %}
-                </select>
-            </form>
-            <form method="post" action="/configuratore/membro/{{ m.id }}/elimina">
-                <button type="submit" style="background:none; border:none; color:#ef5350; cursor:pointer; font-size:14px;">✕</button>
-            </form>
+            <form method="post" action="/configuratore/membro/{{ m.id }}/ruolo" style="flex:1; display:flex; flex-direction:column; gap:3px;">
+    		<select name="ruolo_id" style="width:100%; font-size:11px; padding:2px 4px;">
+        	    <option value="">— ruolo —</option>
+        	    {% for r in db_ruoli_utente(m.utente_id) %}
+        	    <option value="{{ r.id }}" {{ 'selected' if m.ruolo_id == r.id }}>{{ r.nome }}</option>
+        	    {% endfor %}
+    		</select>
+    		<select name="sottoruolo" style="width:100%; font-size:11px; padding:2px 4px;">
+        	    <option value="">— sottoruolo —</option>
+        	    {% for acronimo, label in [
+            		('R',    'R — Rallista'),
+            		('RI',   'RI — Resp. Immersione'),
+         		('C',    'C — Conducente'),
+            		('TL',   'TL — Team Leader'),
+            		('SL',   'SL — Squad Leader'),
+            		('TL/C', 'TL/C — Team Leader/Conducente'),
+            		('SL/C', 'SL/C — Squad Leader/Conducente')
+        	    ] %}
+        	    <option value="{{ acronimo }}" {{ 'selected' if m.sottoruolo == acronimo }}>{{ label }}</option>
+        	    {% endfor %}
+    		</select>
+    		<button type="submit" class="btn btn-primary" style="font-size:10px; padding:2px 6px;">Salva</button>
+	    </form>
         </div>
         {% endfor %}
     </div>
