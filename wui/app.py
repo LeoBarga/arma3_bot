@@ -18,6 +18,8 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "cambia_questa_chiave")
+from datetime import timedelta
+app.permanent_session_lifetime = timedelta(hours=1)
 app.jinja_env.filters['enumerate'] = enumerate
 
 login_manager = LoginManager()
@@ -147,7 +149,9 @@ def login():
 
         row = db("SELECT * FROM wui_utenti WHERE username = %s", (username,), fetch="one")
         if row and bcrypt.checkpw(password.encode(), row["password_hash"].encode()):
-            login_user(WuiUtente(row["id"], row["username"], row["ruolo"]))
+            login_user(WuiUtente(row["id"], row["username"], row["ruolo"]), remember=True, duration=timedelta(hours=1))
+            from flask import session
+            session.permanent = True
             return redirect(url_for("index"))
 
         flash("Credenziali non valide.")
