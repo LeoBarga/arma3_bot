@@ -24,6 +24,8 @@ app.jinja_env.filters['enumerate'] = enumerate
 
 login_manager = LoginManager()
 login_manager.init_app(app)
+from flask_wtf.csrf import CSRFProtect
+csrf = CSRFProtect(app)
 login_manager.login_view = "login"
 
 limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri="memory://")
