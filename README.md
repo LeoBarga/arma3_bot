@@ -40,23 +40,23 @@ arma3_bot/
 ## Setup iniziale
 
 ### 1. Clona il repository e crea l'ambiente virtuale
-
+```
 git clone <url_repo>
 cd arma3_bot
 python3 -m venv venv
 source venv/bin/activate
-
+```
 ### 2. Installa le dipendenze
-
+```
 pip install -r requirements.txt
-
+```
 ### 3. Crea il file .env
-
+```
 cp .env.example .env
 nano .env
-
+```
 Contenuto del file .env:
-
+```
 BOT_TOKEN=il_tuo_token_da_botfather
 DB_HOST=localhost
 DB_PORT=3306
@@ -65,21 +65,21 @@ DB_USER=arma3user
 DB_PASSWORD=la_tua_password
 GRUPPO_ID=-100xxxxxxxxxx
 SECRET_KEY=stringa_casuale_lunga
-
-Per generare SECRET_KEY:
-python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+Per generare SECRET_KEY:```
+python3 -c "import secrets; print(secrets.token_hex(32))"```
 
 Per trovare GRUPPO_ID: aggiungi il bot al gruppo principale, scrivi qualcosa
 e cerca nei log la riga "Chat ID: ..." dopo aver aggiunto il log in
 registra_da_gruppo, oppure usa @userinfobot nel gruppo.
 
 ### 4. Imposta il timezone di sistema
-
+```
 sudo timedatectl set-timezone Europe/Rome
 sudo systemctl restart mariadb
-
+```
 ### 5. Crea il database su MariaDB
-
+```
 sudo mysql -u root -p
 
 CREATE DATABASE arma3_bot CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -87,72 +87,79 @@ CREATE USER 'arma3user'@'localhost' IDENTIFIED BY 'la_tua_password';
 GRANT ALL PRIVILEGES ON arma3_bot.* TO 'arma3user'@'localhost';
 FLUSH PRIVILEGES;
 EXIT;
-
+```
 ### 6. Configura MariaDB per evitare corruzioni InnoDB
-
+```
 sudo nano /etc/mysql/mariadb.conf.d/50-server.cnf
-
+```
 Aggiungi nella sezione [mysqld]:
-
+```
 innodb_flush_log_at_trx_commit = 2
 innodb_flush_method = O_DSYNC
+```
 
-sudo systemctl restart mariadb
+Esegui: ```sudo systemctl restart mariadb```
 
 ### 7. Esegui le migrazioni
 
-python migrations/run_migrations.py
+```python migrations/run_migrations.py```
 
 ### 8. Inserisci i dati iniziali nel DB
-
+```
 mysql -u arma3user -p arma3_bot
-
--- Utente admin principale
+```
+-- Utente admin principale:
+```
 INSERT INTO utenti (telegram_id, nome, username, stato, grado_id)
 VALUES (IL_TUO_TELEGRAM_ID, 'Nome', 'NomeInGioco', 'effettivo',
         (SELECT id FROM gradi WHERE nome = 'Soldato'));
 SET @uid = LAST_INSERT_ID();
 INSERT INTO utenti_permessi (utente_id, permesso) VALUES (@uid, 'admin');
 INSERT INTO utenti_permessi (utente_id, permesso) VALUES (@uid, 'istruttore');
-
--- Tipo sondaggio SL
+```
+-- Tipo sondaggio SL:
+```
 INSERT INTO tipi_sondaggio (nome, descrizione, target, attivo)
 VALUES ('Valutazione SL', 'Valutazione degli Squad Leader', 'sl', TRUE);
-
--- Tipo sondaggio PL
+```
+-- Tipo sondaggio PL:
+```
 INSERT INTO tipi_sondaggio (nome, descrizione, target, attivo)
 VALUES ('Valutazione PL', 'Valutazione dei Comandanti di Plotone', 'pl', TRUE);
-
--- Anno di gioco corrente (modifica le date)
+```
+-- Anno di gioco corrente (modifica le date):
+```
 INSERT INTO anni_gioco (nome, data_inizio, data_fine, attivo)
 VALUES ('2025-2026', '2025-09-01', '2026-06-30', TRUE);
 
 EXIT;
-
+```
 ### 9. Crea gli utenti WUI
 
 Utente admin WUI:
+```
 python3 -c "
 import bcrypt
 password = input('Password per admin_wui: ').encode()
 hash = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
 print(f\"INSERT INTO wui_utenti (username, password_hash, ruolo) VALUES ('admin_wui', '{hash}', 'admin');\")
 "
-
+```
 Utente configuratore WUI:
+```
 python3 -c "
 import bcrypt
 password = input('Password per config_wui: ').encode()
 hash = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
 print(f\"INSERT INTO wui_utenti (username, password_hash, ruolo) VALUES ('config_wui', '{hash}', 'config');\")
 "
-
+```
 Esegui gli INSERT generati nel DB.
 
 ### 10. Configura BotFather
 
 Vai su @BotFather e imposta i comandi con /setcommands:
-
+```
 start - Registrati o controlla il tuo stato
 stato - Visualizza le tue informazioni
 valuta - Compila un sondaggio di valutazione
@@ -161,7 +168,7 @@ chiudi_sondaggio - [ADMIN] Chiudi un sondaggio attivo
 sondaggi - [ADMIN] Visualizza i sondaggi attivi
 crea - [ADMIN] Crea una nuova serata nel gruppo
 annulla - Annulla l'operazione in corso
-
+```
 ### 11. Configura i gruppi Telegram
 
 Gruppo principale (supergroup con Forum mode):
@@ -176,17 +183,17 @@ Gruppo admin:
 ## Avvio
 
 ### Bot Telegram
-
+```
 cd arma3_bot
 source venv/bin/activate
 python main.py
-
+```
 ### WUI (pannello admin)
-
+```
 cd arma3_bot
 source venv/bin/activate
 python wui/app.py
-
+```
 La WUI è accessibile su http://IP_SERVER:5000
 
 ## Utilizzo
@@ -289,37 +296,32 @@ CONFIGURATORE SQUADRE
 # Manutenzione
 
 ### Aggiungere una migrazione DB
-
+```
 nano migrations/sql/XXX_nome_migrazione.sql
 python migrations/run_migrations.py
-
+```
 ### Backup DB
-
+```
 mysqldump -u arma3user -p --single-transaction arma3_bot > backup_$(date +%Y%m%d).sql
-
-### Se MariaDB non si avvia (corruzione InnoDB)
-
-sudo nano /etc/mysql/mariadb.conf.d/50-server.cnf
-## Aggiungi: innodb_force_recovery = 1 (aumenta fino a 6 se necessario)
-sudo systemctl start mariadb
-## Fai subito il backup, poi rimuovi innodb_force_recovery e riavvia
+```
 
 ### Cambio password WUI
-
+```
 python3 -c "
 import bcrypt
 password = input('Nuova password: ').encode()
 hash = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
 print(f\"UPDATE wui_utenti SET password_hash='{hash}' WHERE username='admin_wui';\")
 "
+```
 ## Esegui l'UPDATE nel DB
 
 ## File .gitignore
-
+```
 venv/
 .venv/
 .env
-`__pycache__/` 
+__pycache__/ 
 *.py[cod]
 *.pyo
 *.log
@@ -329,9 +331,9 @@ venv/
 *.swo
 .DS_Store
 Thumbs.db
-
+```
 ## File .env.example
-
+```
 BOT_TOKEN=
 DB_HOST=localhost
 DB_PORT=3306
@@ -340,7 +342,7 @@ DB_USER=
 DB_PASSWORD=
 GRUPPO_ID=
 SECRET_KEY=
-
+```
 ## Prossimi sviluppi pianificati
 
 1. Nginx + HTTPS per esporre la WUI su dominio pubblico
