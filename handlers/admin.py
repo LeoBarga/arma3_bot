@@ -171,3 +171,26 @@ async def cmd_stato(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
 
     await update.message.reply_text(testo)
+
+# ============================================================
+# /indirizzi — info server arma/ts
+# ============================================================
+
+async def cmd_indirizzi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async with get_pool().acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute("SELECT chiave, valore FROM info_server ORDER BY id")
+            info = await cur.fetchall()
+
+    if not info:
+        await update.message.reply_text("Nessuna info server disponibile.")
+        return
+
+    testo = "🖥 <b>Info Server</b>\n\n"
+    for i in info:
+        if i["valore"]:
+            testo += f"— <b>{i['chiave']}:</b> <code>{i['valore']}</code>\n"
+        if i["chiave"] == "Password ArmA3":
+            testo += "\n"
+
+    await update.message.reply_text(testo, parse_mode="HTML")

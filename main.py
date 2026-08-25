@@ -13,7 +13,7 @@ from telegram.ext import (
 
 from config import BOT_TOKEN
 from db import init_db, close_db
-from handlers.admin import cmd_start, registra_da_gruppo, cmd_stato
+from handlers.admin import cmd_start, registra_da_gruppo, cmd_stato, cmd_indirizzi
 from handlers.sondaggio import (
     cmd_apri_sondaggio, ricevi_modalita, ricevi_tipo, ricevi_nome, ricevi_partita,
     ricevi_quando_apre, ricevi_data_apertura, ricevi_ora_apertura,
@@ -135,6 +135,9 @@ def main():
         avviso_privato,
         filters=filters.ChatType.GROUPS
     ))
+
+    # --- Handler comando indirizzi ---
+    app.add_handler(CommandHandler("indirizzi", cmd_indirizzi))
 
     # --- Registrazione automatica da gruppo ---
     app.add_handler(MessageHandler(

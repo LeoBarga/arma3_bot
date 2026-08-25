@@ -998,6 +998,17 @@ def squadra_ordine_membri(squadra_id):
         db("UPDATE squadre_config_membri SET ordine = %s WHERE id = %s", (i, membro_id))
     return "", 204
 
+@app.route("/server")
+def server():
+    info = db("SELECT * FROM info_server ORDER BY id", fetch="all")
+    return render_template("server.html", info=info)
+
+@app.route("/server/<int:id>/modifica", methods=["POST"])
+def server_modifica(id):
+    db("UPDATE info_server SET valore = %s WHERE id = %s",
+       (request.form.get("valore", ""), id))
+    flash("Info aggiornata.")
+    return redirect(url_for("server"))
 
 # ============================================================
 # AVVIO

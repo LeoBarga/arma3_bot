@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="top-bar">
+    <h1>Info Server</h1>
+</div>
+<div class="card">
+    <table>
+        <thead><tr>
+            <th>Campo</th><th>Valore</th><th>Azioni</th>
+        </tr></thead>
+        <tbody>
+        {% for i in info %}
+        <tr>
+            <td><strong>{{ i.chiave }}</strong></td>
+            <td>
+                <form method="post" action="/server/{{ i.id }}/modifica"
+                      style="display:flex; gap:8px;">
+                    <input name="valore" value="{{ i.valore }}" style="flex:1;">
+                    <button class="btn btn-primary" type="submit">Salva</button>
+                </form>
+            </td>
+            <td style="color:#a0c4ff; font-size:12px;">{{ i.descrizione or "—" }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
