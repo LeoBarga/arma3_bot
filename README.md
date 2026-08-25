@@ -23,6 +23,8 @@ arma3_bot/
 ├── migrations/
 │   ├── run_migrations.py
 │   └── sql/              # file SQL numerati progressivamente
+├── scripts/
+│   └── backup.sh         # script backup automatico
 ├── wui/
 │   ├── app.py            # Flask WUI
 │   └── templates/        # HTML templates
@@ -46,15 +48,18 @@ cd arma3_bot
 python3 -m venv venv
 source venv/bin/activate
 ```
+
 ### 2. Installa le dipendenze
 ```
 pip install -r requirements.txt
 ```
+
 ### 3. Crea il file .env
 ```
 cp .env.example .env
 nano .env
 ```
+
 Contenuto del file .env:
 ```
 BOT_TOKEN=il_tuo_token_da_botfather
@@ -66,8 +71,11 @@ DB_PASSWORD=la_tua_password
 GRUPPO_ID=-100xxxxxxxxxx
 SECRET_KEY=stringa_casuale_lunga
 ```
-Per generare SECRET_KEY:```
-python3 -c "import secrets; print(secrets.token_hex(32))"```
+
+Per generare SECRET_KEY:
+```
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
 
 Per trovare GRUPPO_ID: aggiungi il bot al gruppo principale, scrivi qualcosa
 e cerca nei log la riga "Chat ID: ..." dopo aver aggiunto il log in
@@ -78,6 +86,7 @@ registra_da_gruppo, oppure usa @userinfobot nel gruppo.
 sudo timedatectl set-timezone Europe/Rome
 sudo systemctl restart mariadb
 ```
+
 ### 5. Crea il database su MariaDB
 ```
 sudo mysql -u root -p
@@ -88,27 +97,33 @@ GRANT ALL PRIVILEGES ON arma3_bot.* TO 'arma3user'@'localhost';
 FLUSH PRIVILEGES;
 EXIT;
 ```
+
 ### 6. Configura MariaDB per evitare corruzioni InnoDB
 ```
 sudo nano /etc/mysql/mariadb.conf.d/50-server.cnf
 ```
+
 Aggiungi nella sezione [mysqld]:
 ```
 innodb_flush_log_at_trx_commit = 2
 innodb_flush_method = O_DSYNC
 ```
 
-Esegui: ```sudo systemctl restart mariadb```
+```
+sudo systemctl restart mariadb
+```
 
 ### 7. Esegui le migrazioni
-
-```python migrations/run_migrations.py```
+```
+python migrations/run_migrations.py
+```
 
 ### 8. Inserisci i dati iniziali nel DB
 ```
 mysql -u arma3user -p arma3_bot
 ```
--- Utente admin principale:
+
+Utente admin principale:
 ```
 INSERT INTO utenti (telegram_id, nome, username, stato, grado_id)
 VALUES (IL_TUO_TELEGRAM_ID, 'Nome', 'NomeInGioco', 'effettivo',
@@ -117,23 +132,36 @@ SET @uid = LAST_INSERT_ID();
 INSERT INTO utenti_permessi (utente_id, permesso) VALUES (@uid, 'admin');
 INSERT INTO utenti_permessi (utente_id, permesso) VALUES (@uid, 'istruttore');
 ```
--- Tipo sondaggio SL:
+
+Tipo sondaggio SL:
 ```
 INSERT INTO tipi_sondaggio (nome, descrizione, target, attivo)
 VALUES ('Valutazione SL', 'Valutazione degli Squad Leader', 'sl', TRUE);
 ```
--- Tipo sondaggio PL:
+
+Tipo sondaggio PL:
 ```
 INSERT INTO tipi_sondaggio (nome, descrizione, target, attivo)
 VALUES ('Valutazione PL', 'Valutazione dei Comandanti di Plotone', 'pl', TRUE);
 ```
--- Anno di gioco corrente (modifica le date):
+
+Anno di gioco corrente (modifica le date):
 ```
 INSERT INTO anni_gioco (nome, data_inizio, data_fine, attivo)
 VALUES ('2025-2026', '2025-09-01', '2026-06-30', TRUE);
+```
+
+Info server (modifica i valori dalla WUI dopo il setup):
+```
+INSERT INTO info_server (chiave, valore, descrizione) VALUES
+('Indirizzo ArmA3',     '', 'IP e porta del server ArmA3 (es. 192.168.0.1:2302)'),
+('Password ArmA3',      '', 'Password del server ArmA3'),
+('Indirizzo TeamSpeak', '', 'IP del server TeamSpeak'),
+('Password TeamSpeak',  '', 'Password del server TeamSpeak');
 
 EXIT;
 ```
+
 ### 9. Crea gli utenti WUI
 
 Utente admin WUI:
@@ -145,6 +173,7 @@ hash = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
 print(f\"INSERT INTO wui_utenti (username, password_hash, ruolo) VALUES ('admin_wui', '{hash}', 'admin');\")
 "
 ```
+
 Utente configuratore WUI:
 ```
 python3 -c "
@@ -154,6 +183,7 @@ hash = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
 print(f\"INSERT INTO wui_utenti (username, password_hash, ruolo) VALUES ('config_wui', '{hash}', 'config');\")
 "
 ```
+
 Esegui gli INSERT generati nel DB.
 
 ### 10. Configura BotFather
@@ -163,12 +193,15 @@ Vai su @BotFather e imposta i comandi con /setcommands:
 start - Registrati o controlla il tuo stato
 stato - Visualizza le tue informazioni
 valuta - Compila un sondaggio di valutazione
+indirizzi - Info per connettersi al server
 apri_sondaggio - [ADMIN] Apri un nuovo sondaggio
 chiudi_sondaggio - [ADMIN] Chiudi un sondaggio attivo
 sondaggi - [ADMIN] Visualizza i sondaggi attivi
 crea - [ADMIN] Crea una nuova serata nel gruppo
+indirizzi - Info server TeamSpeak/ArmA
 annulla - Annulla l'operazione in corso
 ```
+
 ### 11. Configura i gruppi Telegram
 
 Gruppo principale (supergroup con Forum mode):
@@ -177,8 +210,12 @@ Gruppo principale (supergroup con Forum mode):
 
 Gruppo admin:
 - Aggiungi il bot come amministratore
-- Il bot deve essere admin per leggere i messaggi (privacy mode)
+- Il bot deve essere admin per leggere i messaggi (disabilita privacy mode da BotFather)
 - Da questo gruppo vengono lanciati tutti i comandi admin
+
+Eventuali altri gruppi (es. gruppo reclute):
+- Aggiungi il bot come amministratore
+- La registrazione automatica avviene per chiunque scriva nel gruppo
 
 ## Avvio
 
@@ -188,12 +225,14 @@ cd arma3_bot
 source venv/bin/activate
 python main.py
 ```
+
 ### WUI (pannello admin)
 ```
 cd arma3_bot
 source venv/bin/activate
 python wui/app.py
 ```
+
 La WUI è accessibile su http://IP_SERVER:5000
 
 ## Utilizzo
@@ -232,6 +271,10 @@ PARTITE
 SONDAGGI
 - Gestione tipi sondaggio e relative domande
 
+SERVER
+- Modifica indirizzo e password di ArmA3 e TeamSpeak
+- I valori aggiornati vengono mostrati agli utenti tramite /indirizzi
+
 CONFIGURATORE SQUADRE
 - Accessibile anche dall'utente config
 - Seleziona una partita con sondaggio presenze aperto
@@ -265,7 +308,7 @@ CONFIGURATORE SQUADRE
   3. Data (bottoni con navigazione per giorni successivi)
   4. Conferma
   Crea automaticamente un topic nel gruppo principale con formato:
-  "📅 GG/MM/YYYY - Serata [Tipo] - [Nome]"
+  "GG/MM/YYYY - Serata [Tipo] - [Nome]"
   Nel topic appaiono: lista presenze aggiornata in tempo reale + bottoni voto
 
 ### Bot Telegram — comandi privati (in chat privata con il bot)
@@ -284,25 +327,49 @@ CONFIGURATORE SQUADRE
   Gli SL non possono votare se stessi.
   Per i sondaggi PL, solo gli SL possono votare.
 
+/indirizzi
+  Mostra indirizzo e password di ArmA3 e TeamSpeak.
+  Disponibile in qualsiasi chat dove il bot è presente.
+
 ### Sondaggio presenze (topic nel gruppo principale)
 
-- Tre bottoni: Presente / Assente / Forse (confermo entro le 18)
+- Tre bottoni: Presente / Forse / Assente
 - La lista si aggiorna in tempo reale ad ogni voto
 - Flag [R] accanto al nome per chi vota dopo le 18:00 del giorno della partita
 - Voto bloccato dopo le 21:00 del giorno della partita
-- Lista mostra: nome in gioco, grado, flag ritardo
+- Lista mostra: grado in monospace + nome in gioco, flag ritardo
 - Ordinamento per grado decrescente all'interno di ogni categoria
 
-# Manutenzione
+## Manutenzione
 
 ### Aggiungere una migrazione DB
 ```
 nano migrations/sql/XXX_nome_migrazione.sql
 python migrations/run_migrations.py
 ```
-### Backup DB
+
+### Backup manuale
 ```
 mysqldump -u arma3user -p --single-transaction arma3_bot > backup_$(date +%Y%m%d).sql
+```
+
+### Backup automatico
+
+Lo script `scripts/backup.sh` esegue il backup ogni notte, comprime il file e
+rimuove i backup più vecchi di 30 giorni. Per attivarlo aggiungi il cron:
+```
+crontab -e
+```
+
+Aggiungi questa riga:
+```
+0 2 * * * /home/mailtest/arma3_bot/scripts/backup.sh >> /home/mailtest/arma3_bot/scripts/backup.log 2>&1
+```
+
+Per testare lo script manualmente:
+```
+~/arma3_bot/scripts/backup.sh
+ls ~/arma3_bot/backups/
 ```
 
 ### Cambio password WUI
@@ -314,14 +381,49 @@ hash = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
 print(f\"UPDATE wui_utenti SET password_hash='{hash}' WHERE username='admin_wui';\")
 "
 ```
-## Esegui l'UPDATE nel DB
+
+Esegui l'UPDATE nel DB.
+
+### Se MariaDB non si avvia (corruzione InnoDB)
+```
+sudo nano /etc/mysql/mariadb.conf.d/50-server.cnf
+```
+
+Aggiungi nella sezione [mysqld] (aumenta il valore fino a 6 se necessario):
+```
+innodb_force_recovery = 1
+```
+
+```
+sudo systemctl start mariadb
+```
+
+Fai subito il backup:
+```
+mysqldump -u arma3user -p --single-transaction --quick --lock-tables=false arma3_bot > backup_recovery_$(date +%Y%m%d).sql
+```
+
+Poi rimuovi `innodb_force_recovery` e riavvia MariaDB.
+
+## Prossimi sviluppi pianificati
+
+1. Nginx + HTTPS per esporre la WUI su dominio pubblico tramite reverse proxy,
+   con certificato SSL tramite Let's Encrypt. Il server usa già nginx con SSL
+   attivo per il sito WordPress esistente.
+
+2. Import dati storici da Excel (punteggi, presenze, gradi pregressi dei giocatori
+   esistenti prima dell'adozione del sistema).
+
+3. Avvio automatico tramite systemd — creare due service unit (bot e WUI) per
+   garantire il riavvio automatico dopo un reboot del server.
 
 ## File .gitignore
+
 ```
 venv/
 .venv/
 .env
-__pycache__/ 
+__pycache__/
 *.py[cod]
 *.pyo
 *.log
@@ -331,8 +433,11 @@ __pycache__/
 *.swo
 .DS_Store
 Thumbs.db
+backups/
 ```
+
 ## File .env.example
+
 ```
 BOT_TOKEN=
 DB_HOST=localhost
@@ -343,8 +448,3 @@ DB_PASSWORD=
 GRUPPO_ID=
 SECRET_KEY=
 ```
-## Prossimi sviluppi pianificati
-
-1. Nginx + HTTPS per esporre la WUI su dominio pubblico
-2. Widget WordPress per mostrare la lista effettivi ordinati per grado
-3. Import dati storici da Excel (punteggi, presenze, gradi pregressi)
