@@ -73,18 +73,17 @@ async def genera_testo_lista(sondaggio_id: int, partita_data_ora: datetime) -> s
         n = nome_utente(v)
         g = v["grado_nome"] or "Recluta"
         r = " [R]" if v["in_ritardo"] else ""
-        return f"• {n} ({g}){r}"
+        return f"<code>{g}</code>    {n}{r}"
 
-    testo  = f"✅ Presenti ({len(presenti)}):\n"
-    testo += "\n".join(formatta(v) for v in presenti) if presenti else "—"
-    testo += f"\n\n❓ Forse ({len(forse)}):\n"
-    testo += "\n".join(formatta(v) for v in forse) if forse else "—"
-    testo += f"\n\n❌ Assenti ({len(assenti)}):\n"
-    testo += "\n".join(formatta(v) for v in assenti) if assenti else "—"
-    testo += f"\n\n🕐 Aggiornato: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    testo  = f"<b>Presenti ({len(presenti)}):</b>\n"
+    testo += "\n".join(formatta(v) for v in presenti) if presenti else "Nessuno"
+    testo += f"\n\n<b>Forse ({len(forse)}):</b>\n"
+    testo += "\n".join(formatta(v) for v in forse) if forse else "Nessuno"
+    testo += f"\n\n<b>Assenti ({len(assenti)}):</b>\n"
+    testo += "\n".join(formatta(v) for v in assenti) if assenti else "Nessuno"
+    testo += f"\n\n<i>🕐 Aggiornato: {datetime.now().strftime('%d/%m/%Y %H:%M')}</i>"
 
     return testo
-
 
 # ============================================================
 # /crea — solo admin, solo nel gruppo
@@ -225,23 +224,24 @@ async def conferma_crea_partita(update: Update, context: ContextTypes.DEFAULT_TY
                 chat_id=GRUPPO_ID,
                 message_thread_id=topic_id,
                 text=(
-                    f"✅ Presenti (0):\n—\n\n"
-                    f"❓ Forse (0):\n—\n\n"
-                    f"❌ Assenti (0):\n—\n\n"
-                    f"🕐 Aggiornato: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-                )
+                    "<b>Presenti (0):</b>\nNessuno\n\n"
+                    "<b>Forse (0):</b>\nNessuno\n\n"
+                    "<b>Assenti (0):</b>\nNessuno\n\n"
+                    f"<i>🕐 Aggiornato: {datetime.now().strftime('%d/%m/%Y %H:%M')}</i>"
+                ),
+                parse_mode="HTML"
             )
 
             # Messaggio 2 — bottoni voto
             tastiera_voto = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Presente",                     callback_data="voto_presente")],
-                [InlineKeyboardButton("❌ Assente",                      callback_data="voto_assente")],
-                [InlineKeyboardButton("❓ Forse (confermo entro le 18)", callback_data="voto_forse")],
+                [InlineKeyboardButton("Presente",  callback_data="voto_presente")],
+                [InlineKeyboardButton("Forse",     callback_data="voto_forse")],
+                [InlineKeyboardButton("Assente",   callback_data="voto_assente")],
             ])
             msg_bottoni = await query.get_bot().send_message(
                 chat_id=GRUPPO_ID,
                 message_thread_id=topic_id,
-                text="Vota il sondaggio:",
+                text=f"Presenza {data_partita.strftime('%A %d %b').capitalize()}",
                 reply_markup=tastiera_voto
             )
 
@@ -352,7 +352,8 @@ async def gestisci_voto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.get_bot().edit_message_text(
             chat_id=GRUPPO_ID,
             message_id=sondaggio["messaggio_lista_id"],
-            text=testo_lista
+            text=testo_lista,
+	    parse_mode="HTML"
         )
     except Exception as e:
         logger.warning(f"Impossibile aggiornare lista: {e}")
